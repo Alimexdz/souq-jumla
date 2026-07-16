@@ -129,6 +129,75 @@ async function supabaseDeleteCustomPrice(productId, retailerId, accessToken) {
   if (!res.ok) throw new Error("تعذر حذف السعر");
 }
 
+// إنشاء طلب واحد + عناصره لمورد معيّن
+async function supabaseCreateOrder(retailerId, wholesalerId, items, accessToken) {
+  const total = items.reduce((s, it) => s + it.price * it.qty, 0);
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/orders`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json", apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${accessToken}`, Prefer: "return=representation",
+    },
+    body: JSON.stringify({ retailer_id: retailerId, wholesaler_id: wholesalerId, status: "pending", total }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error("تعذر إنشاء الطلب");
+  const order = data[0];
+
+  const itemsRes = await fetch(`${SUPABASE_URL}/rest/v1/order_items`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: SUPABASE_KEY, Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(items.map((it) => ({ order_id: order.id, product_id: it.id, product_name: it.name, quantity: it.qty, unit_price: it.price }))),
+  });
+  if (!itemsRes.ok) throw new Error("تعذر حفظ تفاصيل الطلب");
+  return order;
+}
+
+async function supabaseGetRetailerOrders(retailerId, accessToken) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?retailer_id=eq.${retailerId}&select=*&order=created_at.desc`, {
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error("تعذر جلب الطلبات");
+  return res.json();
+}
+
+async function supabaseGetWholesalerOrders(wholesalerId, accessToken) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?wholesaler_id=eq.${wholesalerId}&select=*,order_items(*)&order=created_at.desc`, {
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error("تعذر جلب الطلبات");
+  return res.json();
+}
+
+async function supabaseGetAvailableOrdersForDriver(accessToken) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?status=eq.ready&driver_id=is.null&select=*`, {
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error("تعذر جلب الطلبات المتاحة");
+  return res.json();
+}
+
+async function supabaseGetDriverOrders(driverId, accessToken) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?driver_id=eq.${driverId}&select=*&order=created_at.desc`, {
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error("تعذر جلب طلباتك");
+  return res.json();
+}
+
+async function supabaseUpdateOrderStatus(orderId, fields, accessToken) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?id=eq.${orderId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json", apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${accessToken}`, Prefer: "return=representation",
+    },
+    body: JSON.stringify(fields),
+  });
+  if (!res.ok) throw new Error("تعذر تحديث الطلب");
+  return res.json();
+}
+
 // ============ DESIGN TOKENS (shared across whole app) ============
 const TEAL = "#0E5C56";
 const GOLD = "#C9932A";
@@ -397,33 +466,59 @@ const CATEGORIES = [
   { id: "sweets", label: "حلويات وشوكولاطة" }, { id: "drinks", label: "مشروبات" },
 ];
 
+const ORDER_STATUS_LABELS = {
+  pending: "قيد الانتظار",
+  confirmed: "تم التأكيد",
+  ready: "جاهز للتوصيل",
+  picked_up: "في الطريق إليك",
+  delivered: "تم التسليم",
+};
+const ORDER_STATUS_COLOR = {
+  pending: GOLD, confirmed: TEAL, ready: TEAL, picked_up: CLAY, delivered: TEAL,
+};
+
 function RetailDashboard({ user, onLogout }) {
+  const [tab, setTab] = useState("products");
   const [activeCat, setActiveCat] = useState("all");
   const [cart, setCart] = useState({});
   const [query, setQuery] = useState("");
   const [products, setProducts] = useState([]);
+  const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [checkoutError, setCheckoutError] = useState("");
+  const [checkoutSuccess, setCheckoutSuccess] = useState(false);
 
-  React.useEffect(() => {
-    (async () => {
-      try {
-        const rows = await supabaseGetProductsForRetailer(user.userId, user.accessToken);
-        const normalized = rows.map((p) => ({
-          id: p.id,
-          name: p.name,
-          unit: p.unit,
-          cat: p.category || "grocery",
-          price: p.custom_prices && p.custom_prices.length > 0 ? Number(p.custom_prices[0].price) : Number(p.base_price),
-          image_url: p.image_url,
-        }));
-        setProducts(normalized);
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+  const loadProducts = async () => {
+    try {
+      const rows = await supabaseGetProductsForRetailer(user.userId, user.accessToken);
+      const normalized = rows.map((p) => ({
+        id: p.id,
+        name: p.name,
+        unit: p.unit,
+        cat: p.category || "grocery",
+        wholesalerId: p.wholesaler_id,
+        price: p.custom_prices && p.custom_prices.length > 0 ? Number(p.custom_prices[0].price) : Number(p.base_price),
+        image_url: p.image_url,
+      }));
+      setProducts(normalized);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadOrders = async () => {
+    try {
+      const rows = await supabaseGetRetailerOrders(user.userId, user.accessToken);
+      setOrders(rows);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  React.useEffect(() => { loadProducts(); loadOrders(); }, []);
 
   const filtered = products.filter((p) => (activeCat === "all" || p.cat === activeCat) && p.name.includes(query));
   const addToCart = (id) => setCart((c) => ({ ...c, [id]: (c[id] || 0) + 1 }));
@@ -439,6 +534,32 @@ function RetailDashboard({ user, onLogout }) {
     return sum + (p ? p.price * qty : 0);
   }, 0);
 
+  const handleCheckout = async () => {
+    setCheckoutError("");
+    setCheckoutLoading(true);
+    try {
+      // نجمع عناصر السلة حسب المورد، لأن كل طلب يخص مورد واحد
+      const byWholesaler = {};
+      Object.entries(cart).forEach(([id, qty]) => {
+        const p = products.find((pp) => pp.id === id);
+        if (!p) return;
+        if (!byWholesaler[p.wholesalerId]) byWholesaler[p.wholesalerId] = [];
+        byWholesaler[p.wholesalerId].push({ id: p.id, name: p.name, price: p.price, qty });
+      });
+      for (const wholesalerId of Object.keys(byWholesaler)) {
+        await supabaseCreateOrder(user.userId, wholesalerId, byWholesaler[wholesalerId], user.accessToken);
+      }
+      setCart({});
+      setCheckoutSuccess(true);
+      await loadOrders();
+      setTimeout(() => { setCheckoutSuccess(false); setTab("orders"); }, 1200);
+    } catch (e) {
+      setCheckoutError(e.message || "تعذر إتمام الطلب، حاول مرة أخرى");
+    } finally {
+      setCheckoutLoading(false);
+    }
+  };
+
   return (
     <div dir="rtl" className="min-h-screen w-full" style={{ background: SURFACE, fontFamily: "'IBM Plex Sans Arabic', sans-serif" }}>
       {FONTS}
@@ -446,6 +567,8 @@ function RetailDashboard({ user, onLogout }) {
         user={user}
         onLogout={onLogout}
         accent={TEAL}
+        tabs={[{ id: "products", label: "المنتجات" }, { id: "orders", label: `طلباتي (${orders.length})` }]}
+        activeTab={tab} onTabChange={setTab}
         extra={
           <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm relative" style={{ background: TEAL }}>
             {cartCount > 9 ? "9+" : cartCount}
@@ -453,84 +576,115 @@ function RetailDashboard({ user, onLogout }) {
         }
       />
       <main className="max-w-5xl mx-auto px-5 py-6">
-        <div className="flex gap-3 mb-6 flex-wrap">
-          <div className="rounded-xl p-4 flex-1 min-w-max" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
-            <p className="text-xs font-medium" style={{ color: MUTED }}>المنتجات المتوفرة</p>
-            <p className="text-xl font-black mt-1" style={{ color: INK, fontFamily: "'Cairo', sans-serif" }}>{products.length}</p>
-          </div>
-          <div className="rounded-xl p-4 flex-1 min-w-max" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
-            <p className="text-xs font-medium" style={{ color: MUTED }}>سلة الشراء</p>
-            <p className="text-xl font-black mt-1" style={{ color: INK, fontFamily: "'Cairo', sans-serif" }}>{cartTotal.toLocaleString()} د.ج</p>
-          </div>
-          <div className="rounded-xl p-4 flex-1 min-w-max" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
-            <p className="text-xs font-medium" style={{ color: MUTED }}>أسعارك الخاصة</p>
-            <p className="text-xl font-black mt-1" style={{ color: INK, fontFamily: "'Cairo', sans-serif" }}>نشطة</p>
-            <p className="text-xs mt-0.5" style={{ color: GOLD }}>غير مرئية للتجار الآخرين</p>
-          </div>
-        </div>
+        {tab === "products" && (
+          <>
+            <div className="flex gap-3 mb-6 flex-wrap">
+              <div className="rounded-xl p-4 flex-1 min-w-max" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
+                <p className="text-xs font-medium" style={{ color: MUTED }}>المنتجات المتوفرة</p>
+                <p className="text-xl font-black mt-1" style={{ color: INK, fontFamily: "'Cairo', sans-serif" }}>{products.length}</p>
+              </div>
+              <div className="rounded-xl p-4 flex-1 min-w-max" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
+                <p className="text-xs font-medium" style={{ color: MUTED }}>سلة الشراء</p>
+                <p className="text-xl font-black mt-1" style={{ color: INK, fontFamily: "'Cairo', sans-serif" }}>{cartTotal.toLocaleString()} د.ج</p>
+              </div>
+              <div className="rounded-xl p-4 flex-1 min-w-max" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
+                <p className="text-xs font-medium" style={{ color: MUTED }}>أسعارك الخاصة</p>
+                <p className="text-xl font-black mt-1" style={{ color: INK, fontFamily: "'Cairo', sans-serif" }}>نشطة</p>
+                <p className="text-xs mt-0.5" style={{ color: GOLD }}>غير مرئية للتجار الآخرين</p>
+              </div>
+            </div>
 
-        <input type="text" placeholder="ابحث عن منتج..." value={query} onChange={(e) => setQuery(e.target.value)}
-          className="w-full rounded-lg px-4 py-3 text-sm outline-none mb-4" style={{ border: `1.5px solid ${BORDER}`, background: "#FFF", color: INK }} />
+            <input type="text" placeholder="ابحث عن منتج..." value={query} onChange={(e) => setQuery(e.target.value)}
+              className="w-full rounded-lg px-4 py-3 text-sm outline-none mb-4" style={{ border: `1.5px solid ${BORDER}`, background: "#FFF", color: INK }} />
 
-        <div className="flex gap-2 mb-5 overflow-x-auto pb-1">
-          {CATEGORIES.map((c) => {
-            const active = c.id === activeCat;
-            return (
-              <button key={c.id} onClick={() => setActiveCat(c.id)} className="whitespace-nowrap rounded-full px-4 py-2 text-xs font-semibold transition-colors"
-                style={{ background: active ? TEAL : "#FFF", color: active ? "#FFF" : MUTED, border: `1px solid ${active ? TEAL : BORDER}` }}>
-                {c.label}
-              </button>
-            );
-          })}
-        </div>
+            <div className="flex gap-2 mb-5 overflow-x-auto pb-1">
+              {CATEGORIES.map((c) => {
+                const active = c.id === activeCat;
+                return (
+                  <button key={c.id} onClick={() => setActiveCat(c.id)} className="whitespace-nowrap rounded-full px-4 py-2 text-xs font-semibold transition-colors"
+                    style={{ background: active ? TEAL : "#FFF", color: active ? "#FFF" : MUTED, border: `1px solid ${active ? TEAL : BORDER}` }}>
+                    {c.label}
+                  </button>
+                );
+              })}
+            </div>
 
-        {loading && <p className="text-center text-sm py-10" style={{ color: MUTED }}>جاري التحميل...</p>}
-        {!loading && products.length === 0 && (
-          <p className="text-center text-sm py-16" style={{ color: MUTED }}>ماكانش منتجات متوفرة حالياً، رجع بعد شوية</p>
+            {loading && <p className="text-center text-sm py-10" style={{ color: MUTED }}>جاري التحميل...</p>}
+            {!loading && products.length === 0 && (
+              <p className="text-center text-sm py-16" style={{ color: MUTED }}>ماكانش منتجات متوفرة حالياً، رجع بعد شوية</p>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-24">
+              {filtered.map((p) => {
+                const qty = cart[p.id] || 0;
+                return (
+                  <div key={p.id} className="rounded-xl p-4 flex gap-3" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
+                    <div className="w-14 h-14 rounded-lg overflow-hidden flex items-center justify-center text-2xl shrink-0" style={{ background: `${TEAL}12` }}>
+                      {p.image_url ? <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" /> : "📦"}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold truncate" style={{ color: INK }}>{p.name}</p>
+                      <p className="text-xs" style={{ color: MUTED }}>{p.unit}</p>
+                      <div className="flex items-center justify-between mt-2">
+                        <div>
+                          <span className="text-sm font-black" style={{ color: TEAL, fontFamily: "'Cairo', sans-serif" }}>{p.price.toLocaleString()} د.ج</span>
+                          <span className="text-xs block" style={{ color: GOLD }}>سعرك الخاص</span>
+                        </div>
+                        {qty === 0 ? (
+                          <button onClick={() => addToCart(p.id)} className="rounded-lg px-3 py-1.5 text-xs font-bold text-white" style={{ background: TEAL }}>أضف</button>
+                        ) : (
+                          <div className="flex items-center gap-2 rounded-lg" style={{ border: `1px solid ${TEAL}` }}>
+                            <button onClick={() => changeQty(p.id, -1)} className="px-2.5 py-1.5 text-sm font-bold" style={{ color: TEAL }}>−</button>
+                            <span className="text-xs font-bold" style={{ color: INK }}>{qty}</span>
+                            <button onClick={() => changeQty(p.id, 1)} className="px-2.5 py-1.5 text-sm font-bold" style={{ color: TEAL }}>+</button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-24">
-          {filtered.map((p) => {
-            const qty = cart[p.id] || 0;
-            return (
-              <div key={p.id} className="rounded-xl p-4 flex gap-3" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
-                <div className="w-14 h-14 rounded-lg overflow-hidden flex items-center justify-center text-2xl shrink-0" style={{ background: `${TEAL}12` }}>
-                  {p.image_url ? <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" /> : "📦"}
+        {tab === "orders" && (
+          <div className="space-y-3 mb-10">
+            {orders.length === 0 && <p className="text-center text-sm py-16" style={{ color: MUTED }}>ماعندكش طلبات بعد</p>}
+            {orders.map((o) => (
+              <div key={o.id} className="rounded-xl p-4" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold" style={{ color: MUTED }}>#{o.id.slice(0, 8)}</span>
+                  <Pill tone="teal">{ORDER_STATUS_LABELS[o.status] || o.status}</Pill>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold truncate" style={{ color: INK }}>{p.name}</p>
-                  <p className="text-xs" style={{ color: MUTED }}>{p.unit}</p>
-                  <div className="flex items-center justify-between mt-2">
-                    <div>
-                      <span className="text-sm font-black" style={{ color: TEAL, fontFamily: "'Cairo', sans-serif" }}>{p.price.toLocaleString()} د.ج</span>
-                      <span className="text-xs block" style={{ color: GOLD }}>سعرك الخاص</span>
-                    </div>
-                    {qty === 0 ? (
-                      <button onClick={() => addToCart(p.id)} className="rounded-lg px-3 py-1.5 text-xs font-bold text-white" style={{ background: TEAL }}>أضف</button>
-                    ) : (
-                      <div className="flex items-center gap-2 rounded-lg" style={{ border: `1px solid ${TEAL}` }}>
-                        <button onClick={() => changeQty(p.id, -1)} className="px-2.5 py-1.5 text-sm font-bold" style={{ color: TEAL }}>−</button>
-                        <span className="text-xs font-bold" style={{ color: INK }}>{qty}</span>
-                        <button onClick={() => changeQty(p.id, 1)} className="px-2.5 py-1.5 text-sm font-bold" style={{ color: TEAL }}>+</button>
-                      </div>
-                    )}
-                  </div>
-                </div>
+                <p className="text-base font-black" style={{ color: INK, fontFamily: "'Cairo', sans-serif" }}>{Number(o.total).toLocaleString()} د.ج</p>
+                <p className="text-xs mt-1" style={{ color: MUTED }}>{new Date(o.created_at).toLocaleDateString("ar-DZ")}</p>
               </div>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+        )}
       </main>
 
-      {cartCount > 0 && (
+      {tab === "products" && cartCount > 0 && (
         <div className="fixed bottom-0 inset-x-0 z-30">
           <div className="max-w-5xl mx-auto px-5 pb-4">
-            <div className="rounded-xl px-5 py-4 flex items-center justify-between shadow-xl" style={{ background: INK }}>
-              <div>
-                <p className="text-xs" style={{ color: "#C9BFA9" }}>{cartCount} منتج في السلة</p>
-                <p className="text-base font-black text-white" style={{ fontFamily: "'Cairo', sans-serif" }}>{cartTotal.toLocaleString()} د.ج</p>
-              </div>
-              <button className="rounded-lg px-5 py-2.5 text-sm font-bold text-white" style={{ background: GOLD }}>إتمام الطلب</button>
+            <div className="rounded-xl px-5 py-4 shadow-xl" style={{ background: INK }}>
+              {checkoutError && (
+                <p className="text-xs font-semibold mb-2" style={{ color: "#FF9B85" }}>{checkoutError}</p>
+              )}
+              {checkoutSuccess ? (
+                <p className="text-center text-sm font-bold py-2" style={{ color: GOLD }}>✓ تم إرسال طلبك بنجاح</p>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs" style={{ color: "#C9BFA9" }}>{cartCount} منتج في السلة</p>
+                    <p className="text-base font-black text-white" style={{ fontFamily: "'Cairo', sans-serif" }}>{cartTotal.toLocaleString()} د.ج</p>
+                  </div>
+                  <button onClick={handleCheckout} disabled={checkoutLoading} className="rounded-lg px-5 py-2.5 text-sm font-bold text-white" style={{ background: GOLD, opacity: checkoutLoading ? 0.6 : 1 }}>
+                    {checkoutLoading ? "جاري الإرسال..." : "إتمام الطلب"}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -638,10 +792,20 @@ function WholesaleDashboard({ user, onLogout }) {
   const [tab, setTab] = useState("products");
   const [products, setProducts] = useState([]);
   const [retailers, setRetailers] = useState([]);
+  const [orders, setOrders] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [customPrices, setCustomPrices] = useState({});
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+
+  const loadOrders = async () => {
+    try {
+      const rows = await supabaseGetWholesalerOrders(user.userId, user.accessToken);
+      setOrders(rows);
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   React.useEffect(() => {
     (async () => {
@@ -659,7 +823,17 @@ function WholesaleDashboard({ user, onLogout }) {
         setLoading(false);
       }
     })();
+    loadOrders();
   }, []);
+
+  const advanceOrder = async (orderId, nextStatus) => {
+    try {
+      await supabaseUpdateOrderStatus(orderId, { status: nextStatus }, user.accessToken);
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o)));
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const openPricing = async (productId) => {
     setSelectedProduct(productId);
@@ -694,7 +868,7 @@ function WholesaleDashboard({ user, onLogout }) {
       {FONTS}
       <AppHeader
         user={user} onLogout={onLogout} accent={GOLD}
-        tabs={[{ id: "products", label: "منتجاتي" }, { id: "pricing", label: "الأسعار الخاصة" }, { id: "retailers", label: "التجار" }]}
+        tabs={[{ id: "products", label: "منتجاتي" }, { id: "orders", label: `الطلبات (${orders.filter((o) => o.status === "pending").length})` }, { id: "pricing", label: "الأسعار الخاصة" }, { id: "retailers", label: "التجار" }]}
         activeTab={tab} onTabChange={setTab}
         extra={<button onClick={() => setShowAddModal(true)} className="rounded-lg px-4 py-2 text-xs font-bold text-white" style={{ background: GOLD }}>+ منتج جديد</button>}
       />
@@ -723,6 +897,38 @@ function WholesaleDashboard({ user, onLogout }) {
                   </div>
                 </div>
                 <button onClick={() => openPricing(p.id)} className="text-xs font-bold px-3 py-2 rounded-lg shrink-0" style={{ color: GOLD, border: `1px solid ${GOLD}` }}>الأسعار الخاصة</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!loading && tab === "orders" && (
+          <div className="space-y-3">
+            {orders.length === 0 && <p className="text-center text-sm py-16" style={{ color: MUTED }}>ماعندكش طلبات بعد</p>}
+            {orders.map((o) => (
+              <div key={o.id} className="rounded-xl p-4" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold" style={{ color: MUTED }}>#{o.id.slice(0, 8)}</span>
+                  <Pill tone={o.status === "pending" ? "gold" : "teal"}>{ORDER_STATUS_LABELS[o.status] || o.status}</Pill>
+                </div>
+                <div className="space-y-1 mb-3">
+                  {(o.order_items || []).map((it) => (
+                    <p key={it.id} className="text-xs" style={{ color: MUTED }}>{it.quantity} × {it.product_name} — {Number(it.unit_price * it.quantity).toLocaleString()} د.ج</p>
+                  ))}
+                </div>
+                <p className="text-sm font-black mb-3" style={{ color: INK, fontFamily: "'Cairo', sans-serif" }}>المجموع: {Number(o.total).toLocaleString()} د.ج</p>
+                {o.status === "pending" && (
+                  <button onClick={() => advanceOrder(o.id, "confirmed")} className="w-full rounded-lg py-2.5 text-sm font-bold text-white" style={{ background: TEAL }}>تأكيد الطلب</button>
+                )}
+                {o.status === "confirmed" && (
+                  <button onClick={() => advanceOrder(o.id, "ready")} className="w-full rounded-lg py-2.5 text-sm font-bold text-white" style={{ background: GOLD }}>تجهيز للتوصيل</button>
+                )}
+                {o.status === "ready" && (
+                  <p className="text-xs text-center py-1" style={{ color: MUTED }}>بانتظار سائق يوكل الطلب</p>
+                )}
+                {(o.status === "picked_up" || o.status === "delivered") && (
+                  <p className="text-xs text-center py-1 font-semibold" style={{ color: GOLD }}>✓ {o.status === "delivered" ? "تم التسليم" : "مع السائق في الطريق"}</p>
+                )}
               </div>
             ))}
           </div>
@@ -798,65 +1004,74 @@ function WholesaleDashboard({ user, onLogout }) {
 }
 
 // ============ DRIVER DASHBOARD ============
-const STATUS_FLOW = ["مقبول", "في الطريق للمورد", "تم الاستلام", "في الطريق للزبون", "تم التسليم"];
-const INITIAL_ORDERS = [
-  { id: "SJ-1042", from: "مؤسسة النور للتوزيع، قسنطينة", to: "محل بركة الشرق، الخروب", items: "3 كراتين زيت + 2 كيس سكر", distance: "12 كم", fee: 800, statusIdx: 1 },
-  { id: "SJ-1043", from: "الأطلس للتوزيع، قسنطينة", to: "بقالة الأمانة، عين السمارة", items: "1 كيس حليب مجفف", distance: "18 كم", fee: 1100, statusIdx: 0 },
-];
-const HISTORY = [
-  { id: "SJ-1038", to: "سوبيرات النجاح، سطيف", fee: 1400, date: "أمس" },
-  { id: "SJ-1035", to: "محلات وادي الزناتي، عنابة", fee: 2200, date: "قبل يومين" },
-];
-
-function OrderCard({ order, onAdvance }) {
-  const isDone = order.statusIdx >= STATUS_FLOW.length - 1;
+function OrderCard({ order, onAction, actionLabel, subLabel }) {
   return (
     <div className="rounded-xl p-4" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
       <div className="flex items-center justify-between mb-3">
-        <span className="text-xs font-bold" style={{ color: MUTED }}>{order.id}</span>
-        <Pill tone="clay">{order.fee.toLocaleString()} د.ج</Pill>
+        <span className="text-xs font-bold" style={{ color: MUTED }}>#{order.id.slice(0, 8)}</span>
+        <Pill tone="clay">{Number(order.total).toLocaleString()} د.ج</Pill>
       </div>
-      <div className="space-y-2 mb-3">
-        <div className="flex items-start gap-2">
-          <div className="w-2 h-2 rounded-full mt-1.5 shrink-0" style={{ background: GOLD }} />
-          <div><p className="text-xs" style={{ color: MUTED }}>الاستلام من</p><p className="text-sm font-semibold" style={{ color: INK }}>{order.from}</p></div>
-        </div>
-        <div className="border-r-2 border-dotted mr-1 h-3" style={{ borderColor: BORDER }} />
-        <div className="flex items-start gap-2">
-          <div className="w-2 h-2 rounded-full mt-1.5 shrink-0" style={{ background: TEAL }} />
-          <div><p className="text-xs" style={{ color: MUTED }}>التسليم إلى</p><p className="text-sm font-semibold" style={{ color: INK }}>{order.to}</p></div>
-        </div>
-      </div>
-      <div className="flex items-center gap-3 mb-3 text-xs" style={{ color: MUTED }}>
-        <span>📦 {order.items}</span><span>📍 {order.distance}</span>
-      </div>
-      <div className="flex items-center gap-1 mb-3">
-        {STATUS_FLOW.map((s, i) => <div key={s} className="flex-1 h-1.5 rounded-full" style={{ background: i <= order.statusIdx ? TEAL : BORDER }} />)}
-      </div>
-      <p className="text-xs font-semibold mb-3" style={{ color: TEAL }}>الحالة: {STATUS_FLOW[order.statusIdx]}</p>
-      {!isDone ? (
-        <button onClick={() => onAdvance(order.id)} className="w-full rounded-lg py-2.5 text-sm font-bold text-white" style={{ background: TEAL }}>تأكيد: {STATUS_FLOW[order.statusIdx + 1]}</button>
-      ) : (
-        <div className="text-center py-1"><span className="text-xs font-bold" style={{ color: GOLD }}>✓ تم التسليم بنجاح</span></div>
+      <p className="text-xs mb-3" style={{ color: MUTED }}>الحالة: {ORDER_STATUS_LABELS[order.status] || order.status}</p>
+      {subLabel && <p className="text-xs mb-3" style={{ color: GOLD }}>{subLabel}</p>}
+      {onAction && (
+        <button onClick={() => onAction(order.id)} className="w-full rounded-lg py-2.5 text-sm font-bold text-white" style={{ background: TEAL }}>{actionLabel}</button>
       )}
     </div>
   );
 }
 
 function DriverDashboard({ user, onLogout }) {
-  const [orders, setOrders] = useState(INITIAL_ORDERS);
+  const [available, setAvailable] = useState([]);
+  const [myOrders, setMyOrders] = useState([]);
   const [tab, setTab] = useState("active");
   const [online, setOnline] = useState(true);
-  const advance = (id) => setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, statusIdx: Math.min(o.statusIdx + 1, STATUS_FLOW.length - 1) } : o)));
-  const todayEarnings = orders.reduce((s, o) => s + (o.statusIdx >= STATUS_FLOW.length - 1 ? o.fee : 0), 0);
-  const activeCount = orders.filter((o) => o.statusIdx < STATUS_FLOW.length - 1).length;
+  const [loading, setLoading] = useState(true);
+
+  const loadAll = async () => {
+    try {
+      const [avail, mine] = await Promise.all([
+        supabaseGetAvailableOrdersForDriver(user.accessToken),
+        supabaseGetDriverOrders(user.userId, user.accessToken),
+      ]);
+      setAvailable(avail);
+      setMyOrders(mine);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  React.useEffect(() => { loadAll(); }, []);
+
+  const acceptOrder = async (orderId) => {
+    try {
+      await supabaseUpdateOrderStatus(orderId, { driver_id: user.userId, status: "picked_up" }, user.accessToken);
+      await loadAll();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const deliverOrder = async (orderId) => {
+    try {
+      await supabaseUpdateOrderStatus(orderId, { status: "delivered" }, user.accessToken);
+      await loadAll();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const activeMyOrders = myOrders.filter((o) => o.status !== "delivered");
+  const completedOrders = myOrders.filter((o) => o.status === "delivered");
+  const todayEarnings = completedOrders.reduce((s, o) => s + Number(o.total) * 0.1, 0); // عمولة توضيحية 10%
 
   return (
     <div dir="rtl" className="min-h-screen w-full" style={{ background: SURFACE, fontFamily: "'IBM Plex Sans Arabic', sans-serif" }}>
       {FONTS}
       <AppHeader
         user={user} onLogout={onLogout} accent={CLAY}
-        tabs={[{ id: "active", label: `طلبات نشطة (${activeCount})` }, { id: "history", label: "السجل" }]}
+        tabs={[{ id: "active", label: `طلبات متاحة (${available.length})` }, { id: "mine", label: `طلباتي (${activeMyOrders.length})` }, { id: "history", label: "السجل" }]}
         activeTab={tab} onTabChange={setTab}
         extra={
           <button onClick={() => setOnline((v) => !v)} className="flex items-center gap-2 rounded-full px-3 py-2 text-xs font-bold" style={{ background: online ? `${TEAL}15` : "#00000008", color: online ? TEAL : MUTED, border: `1px solid ${online ? TEAL : BORDER}` }}>
@@ -868,12 +1083,12 @@ function DriverDashboard({ user, onLogout }) {
       <main className="max-w-5xl mx-auto px-5 py-6">
         <div className="rounded-xl p-4 mb-5 flex items-center justify-between" style={{ background: INK }}>
           <div>
-            <p className="text-xs" style={{ color: "#C9BFA9" }}>أرباح اليوم</p>
-            <p className="text-2xl font-black text-white" style={{ fontFamily: "'Cairo', sans-serif" }}>{todayEarnings.toLocaleString()} د.ج</p>
+            <p className="text-xs" style={{ color: "#C9BFA9" }}>أرباح اليوم (تقديرية)</p>
+            <p className="text-2xl font-black text-white" style={{ fontFamily: "'Cairo', sans-serif" }}>{Math.round(todayEarnings).toLocaleString()} د.ج</p>
           </div>
           <div className="text-left">
             <p className="text-xs" style={{ color: "#C9BFA9" }}>رحلات مكتملة</p>
-            <p className="text-lg font-bold text-white">{orders.filter((o) => o.statusIdx >= STATUS_FLOW.length - 1).length}</p>
+            <p className="text-lg font-bold text-white">{completedOrders.length}</p>
           </div>
         </div>
         {!online && (
@@ -881,17 +1096,33 @@ function DriverDashboard({ user, onLogout }) {
             <p className="text-xs font-semibold" style={{ color: CLAY }}>أنت غير متصل — لن تصلك طلبات جديدة. فعّل الاتصال من الأعلى.</p>
           </div>
         )}
-        {tab === "active" && (
+        {loading && <p className="text-center text-sm py-10" style={{ color: MUTED }}>جاري التحميل...</p>}
+
+        {!loading && tab === "active" && (
           <div className="space-y-3">
-            {orders.length > 0 ? orders.map((o) => <OrderCard key={o.id} order={o} onAdvance={advance} />) : <p className="text-center text-sm py-10" style={{ color: MUTED }}>ماعندكش طلبات نشطة حالياً</p>}
+            {available.length === 0 ? (
+              <p className="text-center text-sm py-16" style={{ color: MUTED }}>ماكانش طلبات متاحة حالياً</p>
+            ) : available.map((o) => (
+              <OrderCard key={o.id} order={o} onAction={acceptOrder} actionLabel="قبول الطلب" subLabel="جاهز للاستلام من المورد" />
+            ))}
           </div>
         )}
-        {tab === "history" && (
+        {!loading && tab === "mine" && (
+          <div className="space-y-3">
+            {activeMyOrders.length === 0 ? (
+              <p className="text-center text-sm py-16" style={{ color: MUTED }}>ماعندكش طلبات نشطة، شوف تبويب "طلبات متاحة"</p>
+            ) : activeMyOrders.map((o) => (
+              <OrderCard key={o.id} order={o} onAction={deliverOrder} actionLabel="تأكيد التسليم" />
+            ))}
+          </div>
+        )}
+        {!loading && tab === "history" && (
           <div className="space-y-2">
-            {HISTORY.map((h) => (
-              <div key={h.id} className="rounded-xl p-4 flex items-center justify-between" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
-                <div><p className="text-sm font-bold" style={{ color: INK }}>{h.to}</p><p className="text-xs" style={{ color: MUTED }}>{h.id} · {h.date}</p></div>
-                <span className="text-sm font-black" style={{ color: TEAL, fontFamily: "'Cairo', sans-serif" }}>{h.fee.toLocaleString()} د.ج</span>
+            {completedOrders.length === 0 && <p className="text-center text-sm py-16" style={{ color: MUTED }}>ماكانش رحلات مكتملة بعد</p>}
+            {completedOrders.map((o) => (
+              <div key={o.id} className="rounded-xl p-4 flex items-center justify-between" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
+                <div><p className="text-sm font-bold" style={{ color: INK }}>#{o.id.slice(0, 8)}</p><p className="text-xs" style={{ color: MUTED }}>{new Date(o.created_at).toLocaleDateString("ar-DZ")}</p></div>
+                <span className="text-sm font-black" style={{ color: TEAL, fontFamily: "'Cairo', sans-serif" }}>{Number(o.total).toLocaleString()} د.ج</span>
               </div>
             ))}
           </div>
