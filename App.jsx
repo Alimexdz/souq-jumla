@@ -504,6 +504,49 @@ const ORDER_STATUS_COLOR = {
   pending: GOLD, confirmed: TEAL, ready: TEAL, picked_up: CLAY, delivered: TEAL,
 };
 
+function StarBadge({ children }) {
+  return (
+    <div className="relative w-14 h-14 flex items-center justify-center shrink-0">
+      <svg viewBox="0 0 100 100" className="absolute inset-0 w-full h-full">
+        <path
+          d="M50 2 L61 30 L91 26 L72 50 L91 74 L61 70 L50 98 L39 70 L9 74 L28 50 L9 26 L39 30 Z"
+          fill={GOLD}
+        />
+      </svg>
+      <span className="relative text-white font-black text-xs leading-tight text-center" style={{ fontFamily: "'Cairo', sans-serif" }}>{children}</span>
+    </div>
+  );
+}
+
+function PromoBanner({ products, onAdd }) {
+  const featured = products.filter((p) => p.image_url).slice(0, 6);
+  if (featured.length === 0) return null;
+  return (
+    <div className="mb-6">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="w-1.5 h-5 rounded-full" style={{ background: GOLD }} />
+        <h2 className="text-sm font-black" style={{ color: INK, fontFamily: "'Cairo', sans-serif" }}>عروض مميزة عندك</h2>
+      </div>
+      <div className="flex gap-3 overflow-x-auto pb-2 -mx-5 px-5">
+        {featured.map((p) => (
+          <div key={p.id} className="relative shrink-0 w-40 rounded-2xl overflow-hidden shadow-sm" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
+            <div className="h-24 w-full overflow-hidden" style={{ background: `${TEAL}12` }}>
+              <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" />
+            </div>
+            <div className="absolute -top-1 -left-1">
+              <StarBadge>{p.price >= 1000 ? `${Math.round(p.price / 1000)}k` : p.price}<br />د.ج</StarBadge>
+            </div>
+            <div className="p-3">
+              <p className="text-xs font-bold truncate mb-2" style={{ color: INK }}>{p.name}</p>
+              <button onClick={() => onAdd(p.id)} className="w-full rounded-lg py-1.5 text-xs font-bold text-white" style={{ background: TEAL }}>أضف للسلة</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function RetailDashboard({ user, onLogout }) {
   const [tab, setTab] = useState("products");
   const [activeCat, setActiveCat] = useState("all");
@@ -628,6 +671,8 @@ function RetailDashboard({ user, onLogout }) {
                 <p className="text-xs mt-0.5" style={{ color: GOLD }}>غير مرئية للتجار الآخرين</p>
               </div>
             </div>
+
+            <PromoBanner products={products} onAdd={addToCart} />
 
             <input type="text" placeholder="ابحث عن منتج..." value={query} onChange={(e) => setQuery(e.target.value)}
               className="w-full rounded-lg px-4 py-3 text-sm outline-none mb-4" style={{ border: `1.5px solid ${BORDER}`, background: "#FFF", color: INK }} />
