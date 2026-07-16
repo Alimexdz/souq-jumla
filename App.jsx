@@ -91,10 +91,20 @@ async function supabaseUploadImage(file, path, accessToken) {
 }
 
 async function supabaseGetRetailers(accessToken) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/profiles?role=eq.retail&select=id,full_name,city,phone`, {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/profiles?role=eq.retail&select=id,full_name,city,phone,address`, {
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) throw new Error("تعذر جلب التجار");
+  return res.json();
+}
+
+async function supabaseGetProfilesByIds(ids, accessToken) {
+  const uniqueIds = [...new Set(ids)].filter(Boolean);
+  if (uniqueIds.length === 0) return [];
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=in.(${uniqueIds.join(",")})&select=id,full_name,phone,address,city`, {
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error("تعذر جلب بيانات الأطراف");
   return res.json();
 }
 
@@ -334,6 +344,7 @@ function LoginScreen({ onLogin }) {
   const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [address, setAddress] = useState("");
   const activeRole = ROLES.find((r) => r.id === role);
 
   const handleSubmit = async () => {
@@ -346,6 +357,10 @@ function LoginScreen({ onLogin }) {
       setError("خاصك تكتب اسمك أو اسم المحل/المؤسسة");
       return;
     }
+    if (mode === "register" && role !== "driver" && !address) {
+      setError("خاصك تكتب عنوان المحل/المؤسسة بدقة");
+      return;
+    }
     setLoading(true);
     try {
       const email = phoneToEmail(phone);
@@ -354,6 +369,7 @@ function LoginScreen({ onLogin }) {
           role,
           full_name: fullName,
           phone,
+          address,
         });
         if (!data.access_token) {
           // ماعندوش access_token مباشرة، نحاول ندخلو
@@ -420,6 +436,17 @@ function LoginScreen({ onLogin }) {
                     onBlur={(e) => (e.target.style.borderColor = BORDER)} />
                 </div>
               )}
+              {mode === "register" && role !== "driver" && (
+                <div>
+                  <label className="block text-xs font-semibold mb-1.5" style={{ color: INK }}>العنوان بالتفصيل</label>
+                  <input type="text" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="مثلاً: حي النصر، شارع 5 جويلية، قسنطينة"
+                    className="w-full rounded-lg px-4 py-3 text-sm outline-none transition-colors"
+                    style={{ border: `1.5px solid ${BORDER}`, background: SURFACE, color: INK }}
+                    onFocus={(e) => (e.target.style.borderColor = activeRole.accent)}
+                    onBlur={(e) => (e.target.style.borderColor = BORDER)} />
+                  <p className="text-xs mt-1" style={{ color: MUTED }}>هذا العنوان يشوفو السائق باش يوصل الطلبية</p>
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-semibold mb-1.5" style={{ color: INK }}>رقم الهاتف</label>
                 <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0555 12 34 56"
@@ -484,6 +511,7 @@ function RetailDashboard({ user, onLogout }) {
   const [query, setQuery] = useState("");
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [driverProfiles, setDriverProfiles] = useState({});
   const [loading, setLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState("");
@@ -513,6 +541,13 @@ function RetailDashboard({ user, onLogout }) {
     try {
       const rows = await supabaseGetRetailerOrders(user.userId, user.accessToken);
       setOrders(rows);
+      const driverIds = rows.map((o) => o.driver_id).filter(Boolean);
+      if (driverIds.length > 0) {
+        const profs = await supabaseGetProfilesByIds(driverIds, user.accessToken);
+        const map = {};
+        profs.forEach((p) => { map[p.id] = p; });
+        setDriverProfiles(map);
+      }
     } catch (e) {
       console.error(e);
     }
@@ -659,6 +694,12 @@ function RetailDashboard({ user, onLogout }) {
                 </div>
                 <p className="text-base font-black" style={{ color: INK, fontFamily: "'Cairo', sans-serif" }}>{Number(o.total).toLocaleString()} د.ج</p>
                 <p className="text-xs mt-1" style={{ color: MUTED }}>{new Date(o.created_at).toLocaleDateString("ar-DZ")}</p>
+                {o.driver_id && driverProfiles[o.driver_id] && (
+                  <div className="mt-2 pt-2 flex items-center justify-between" style={{ borderTop: `1px solid ${BORDER}` }}>
+                    <span className="text-xs" style={{ color: MUTED }}>السائق: {driverProfiles[o.driver_id].full_name}</span>
+                    <span className="text-xs font-bold" style={{ color: TEAL }}>{driverProfiles[o.driver_id].phone}</span>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -905,12 +946,17 @@ function WholesaleDashboard({ user, onLogout }) {
         {!loading && tab === "orders" && (
           <div className="space-y-3">
             {orders.length === 0 && <p className="text-center text-sm py-16" style={{ color: MUTED }}>ماعندكش طلبات بعد</p>}
-            {orders.map((o) => (
+            {orders.map((o) => {
+              const retailer = retailers.find((r) => r.id === o.retailer_id);
+              return (
               <div key={o.id} className="rounded-xl p-4" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-bold" style={{ color: MUTED }}>#{o.id.slice(0, 8)}</span>
                   <Pill tone={o.status === "pending" ? "gold" : "teal"}>{ORDER_STATUS_LABELS[o.status] || o.status}</Pill>
                 </div>
+                {retailer && (
+                  <p className="text-xs mb-2" style={{ color: MUTED }}>التاجر: <strong style={{ color: INK }}>{retailer.full_name}</strong> — {retailer.address || retailer.city || "بلا عنوان"} · {retailer.phone}</p>
+                )}
                 <div className="space-y-1 mb-3">
                   {(o.order_items || []).map((it) => (
                     <p key={it.id} className="text-xs" style={{ color: MUTED }}>{it.quantity} × {it.product_name} — {Number(it.unit_price * it.quantity).toLocaleString()} د.ج</p>
@@ -930,7 +976,7 @@ function WholesaleDashboard({ user, onLogout }) {
                   <p className="text-xs text-center py-1 font-semibold" style={{ color: GOLD }}>✓ {o.status === "delivered" ? "تم التسليم" : "مع السائق في الطريق"}</p>
                 )}
               </div>
-            ))}
+            );})}
           </div>
         )}
 
@@ -1004,13 +1050,31 @@ function WholesaleDashboard({ user, onLogout }) {
 }
 
 // ============ DRIVER DASHBOARD ============
-function OrderCard({ order, onAction, actionLabel, subLabel }) {
+function OrderCard({ order, profiles, onAction, actionLabel, subLabel }) {
+  const wholesaler = profiles?.[order.wholesaler_id];
+  const retailer = profiles?.[order.retailer_id];
   return (
     <div className="rounded-xl p-4" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
       <div className="flex items-center justify-between mb-3">
         <span className="text-xs font-bold" style={{ color: MUTED }}>#{order.id.slice(0, 8)}</span>
         <Pill tone="clay">{Number(order.total).toLocaleString()} د.ج</Pill>
       </div>
+      {(wholesaler || retailer) && (
+        <div className="space-y-2 mb-3">
+          {wholesaler && (
+            <div className="flex items-start gap-2">
+              <div className="w-2 h-2 rounded-full mt-1.5 shrink-0" style={{ background: GOLD }} />
+              <div><p className="text-xs" style={{ color: MUTED }}>الاستلام من</p><p className="text-sm font-semibold" style={{ color: INK }}>{wholesaler.full_name} — {wholesaler.address || wholesaler.city || "بلا عنوان"}</p></div>
+            </div>
+          )}
+          {retailer && (
+            <div className="flex items-start gap-2">
+              <div className="w-2 h-2 rounded-full mt-1.5 shrink-0" style={{ background: TEAL }} />
+              <div><p className="text-xs" style={{ color: MUTED }}>التسليم إلى</p><p className="text-sm font-semibold" style={{ color: INK }}>{retailer.full_name} — {retailer.address || retailer.city || "بلا عنوان"}</p></div>
+            </div>
+          )}
+        </div>
+      )}
       <p className="text-xs mb-3" style={{ color: MUTED }}>الحالة: {ORDER_STATUS_LABELS[order.status] || order.status}</p>
       {subLabel && <p className="text-xs mb-3" style={{ color: GOLD }}>{subLabel}</p>}
       {onAction && (
@@ -1023,6 +1087,7 @@ function OrderCard({ order, onAction, actionLabel, subLabel }) {
 function DriverDashboard({ user, onLogout }) {
   const [available, setAvailable] = useState([]);
   const [myOrders, setMyOrders] = useState([]);
+  const [profiles, setProfiles] = useState({});
   const [tab, setTab] = useState("active");
   const [online, setOnline] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -1035,6 +1100,11 @@ function DriverDashboard({ user, onLogout }) {
       ]);
       setAvailable(avail);
       setMyOrders(mine);
+      const ids = [...avail, ...mine].flatMap((o) => [o.wholesaler_id, o.retailer_id]);
+      const profs = await supabaseGetProfilesByIds(ids, user.accessToken);
+      const map = {};
+      profs.forEach((p) => { map[p.id] = p; });
+      setProfiles(map);
     } catch (e) {
       console.error(e);
     } finally {
@@ -1103,7 +1173,7 @@ function DriverDashboard({ user, onLogout }) {
             {available.length === 0 ? (
               <p className="text-center text-sm py-16" style={{ color: MUTED }}>ماكانش طلبات متاحة حالياً</p>
             ) : available.map((o) => (
-              <OrderCard key={o.id} order={o} onAction={acceptOrder} actionLabel="قبول الطلب" subLabel="جاهز للاستلام من المورد" />
+              <OrderCard key={o.id} order={o} profiles={profiles} onAction={acceptOrder} actionLabel="قبول الطلب" subLabel="جاهز للاستلام من المورد" />
             ))}
           </div>
         )}
@@ -1112,7 +1182,7 @@ function DriverDashboard({ user, onLogout }) {
             {activeMyOrders.length === 0 ? (
               <p className="text-center text-sm py-16" style={{ color: MUTED }}>ماعندكش طلبات نشطة، شوف تبويب "طلبات متاحة"</p>
             ) : activeMyOrders.map((o) => (
-              <OrderCard key={o.id} order={o} onAction={deliverOrder} actionLabel="تأكيد التسليم" />
+              <OrderCard key={o.id} order={o} profiles={profiles} onAction={deliverOrder} actionLabel="تأكيد التسليم" />
             ))}
           </div>
         )}
