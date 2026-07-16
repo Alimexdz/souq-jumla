@@ -41,6 +41,94 @@ async function supabaseGetProfile(userId, accessToken) {
   return data[0] || null;
 }
 
+// جلب منتجات تاجر جملة معيّن
+async function supabaseGetMyProducts(wholesalerId, accessToken) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/products?wholesaler_id=eq.${wholesalerId}&select=*&order=created_at.desc`, {
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error("تعذر جلب المنتجات");
+  return res.json();
+}
+
+// جلب كل المنتجات مع السعر الخاص بتاجر تجزئة معيّن (إن وجد)
+async function supabaseGetProductsForRetailer(retailerId, accessToken) {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/products?select=*,custom_prices(price,retailer_id)&custom_prices.retailer_id=eq.${retailerId}&order=created_at.desc`,
+    { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${accessToken}` } }
+  );
+  if (!res.ok) throw new Error("تعذر جلب المنتجات");
+  return res.json();
+}
+
+async function supabaseInsertProduct(product, accessToken) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/products`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${accessToken}`,
+      Prefer: "return=representation",
+    },
+    body: JSON.stringify(product),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error("تعذر إضافة المنتج");
+  return data[0];
+}
+
+async function supabaseUploadImage(file, path, accessToken) {
+  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/product-images/${path}`, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": file.type,
+    },
+    body: file,
+  });
+  if (!res.ok) throw new Error("تعذر رفع الصورة");
+  return `${SUPABASE_URL}/storage/v1/object/public/product-images/${path}`;
+}
+
+async function supabaseGetRetailers(accessToken) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/profiles?role=eq.retail&select=id,full_name,city,phone`, {
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error("تعذر جلب التجار");
+  return res.json();
+}
+
+async function supabaseGetCustomPricesForProduct(productId, accessToken) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/custom_prices?product_id=eq.${productId}&select=*`, {
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error("تعذر جلب الأسعار");
+  return res.json();
+}
+
+async function supabaseUpsertCustomPrice(productId, retailerId, price, accessToken) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/custom_prices?on_conflict=product_id,retailer_id`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${accessToken}`,
+      Prefer: "resolution=merge-duplicates,return=representation",
+    },
+    body: JSON.stringify({ product_id: productId, retailer_id: retailerId, price }),
+  });
+  if (!res.ok) throw new Error("تعذر حفظ السعر");
+  return res.json();
+}
+
+async function supabaseDeleteCustomPrice(productId, retailerId, accessToken) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/custom_prices?product_id=eq.${productId}&retailer_id=eq.${retailerId}`, {
+    method: "DELETE",
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error("تعذر حذف السعر");
+}
+
 // ============ DESIGN TOKENS (shared across whole app) ============
 const TEAL = "#0E5C56";
 const GOLD = "#C9932A";
@@ -308,32 +396,47 @@ const CATEGORIES = [
   { id: "all", label: "الكل" }, { id: "grocery", label: "بقالة" }, { id: "dairy", label: "ألبان" },
   { id: "sweets", label: "حلويات وشوكولاطة" }, { id: "drinks", label: "مشروبات" },
 ];
-const PRODUCTS = [
-  { id: 1, name: "زيت عباد الشمس 5 لتر", supplier: "مؤسسة النور", cat: "grocery", unit: "كرتون / 4 وحدات", price: 2450, moq: 2, img: "🛢️" },
-  { id: 2, name: "سكر أبيض 50 كغ", supplier: "الأطلس للتوزيع", cat: "grocery", unit: "كيس", price: 6800, moq: 1, img: "🍬" },
-  { id: 3, name: "حليب مجفف 25 كغ", supplier: "دانون الجزائر", cat: "dairy", unit: "كيس", price: 15200, moq: 1, img: "🥛" },
-  { id: 4, name: "بسكويت مغطى بالشوكولاطة", supplier: "بيسكري", cat: "sweets", unit: "كرتون / 24 علبة", price: 3600, moq: 3, img: "🍪" },
-  { id: 5, name: "عصير برتقال 1 لتر", supplier: "روية", cat: "drinks", unit: "كرتون / 12 وحدة", price: 1440, moq: 5, img: "🧃" },
-  { id: 6, name: "شوكولاطة بالحليب 100غ", supplier: "الوان الجزائر", cat: "sweets", unit: "كرتون / 30 وحدة", price: 2850, moq: 2, img: "🍫" },
-];
 
 function RetailDashboard({ user, onLogout }) {
   const [activeCat, setActiveCat] = useState("all");
   const [cart, setCart] = useState({});
   const [query, setQuery] = useState("");
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const filtered = PRODUCTS.filter((p) => (activeCat === "all" || p.cat === activeCat) && (p.name.includes(query) || p.supplier.includes(query)));
-  const addToCart = (id, moq) => setCart((c) => ({ ...c, [id]: (c[id] || 0) + moq }));
-  const changeQty = (id, delta, moq) => setCart((c) => {
-    const next = Math.max(0, (c[id] || 0) + delta * moq);
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const rows = await supabaseGetProductsForRetailer(user.userId, user.accessToken);
+        const normalized = rows.map((p) => ({
+          id: p.id,
+          name: p.name,
+          unit: p.unit,
+          cat: p.category || "grocery",
+          price: p.custom_prices && p.custom_prices.length > 0 ? Number(p.custom_prices[0].price) : Number(p.base_price),
+          image_url: p.image_url,
+        }));
+        setProducts(normalized);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const filtered = products.filter((p) => (activeCat === "all" || p.cat === activeCat) && p.name.includes(query));
+  const addToCart = (id) => setCart((c) => ({ ...c, [id]: (c[id] || 0) + 1 }));
+  const changeQty = (id, delta) => setCart((c) => {
+    const next = Math.max(0, (c[id] || 0) + delta);
     const updated = { ...c, [id]: next };
     if (next === 0) delete updated[id];
     return updated;
   });
   const cartCount = Object.values(cart).reduce((a, b) => a + b, 0);
   const cartTotal = Object.entries(cart).reduce((sum, [id, qty]) => {
-    const p = PRODUCTS.find((p) => p.id === Number(id));
-    return sum + (p ? (p.price / p.moq) * qty : 0);
+    const p = products.find((p) => p.id === id);
+    return sum + (p ? p.price * qty : 0);
   }, 0);
 
   return (
@@ -352,13 +455,12 @@ function RetailDashboard({ user, onLogout }) {
       <main className="max-w-5xl mx-auto px-5 py-6">
         <div className="flex gap-3 mb-6 flex-wrap">
           <div className="rounded-xl p-4 flex-1 min-w-max" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
-            <p className="text-xs font-medium" style={{ color: MUTED }}>طلبات هذا الشهر</p>
-            <p className="text-xl font-black mt-1" style={{ color: INK, fontFamily: "'Cairo', sans-serif" }}>12</p>
-            <p className="text-xs mt-0.5" style={{ color: TEAL }}>+3 عن الشهر الماضي</p>
+            <p className="text-xs font-medium" style={{ color: MUTED }}>المنتجات المتوفرة</p>
+            <p className="text-xl font-black mt-1" style={{ color: INK, fontFamily: "'Cairo', sans-serif" }}>{products.length}</p>
           </div>
           <div className="rounded-xl p-4 flex-1 min-w-max" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
-            <p className="text-xs font-medium" style={{ color: MUTED }}>إجمالي المشتريات</p>
-            <p className="text-xl font-black mt-1" style={{ color: INK, fontFamily: "'Cairo', sans-serif" }}>184,200 د.ج</p>
+            <p className="text-xs font-medium" style={{ color: MUTED }}>سلة الشراء</p>
+            <p className="text-xl font-black mt-1" style={{ color: INK, fontFamily: "'Cairo', sans-serif" }}>{cartTotal.toLocaleString()} د.ج</p>
           </div>
           <div className="rounded-xl p-4 flex-1 min-w-max" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
             <p className="text-xs font-medium" style={{ color: MUTED }}>أسعارك الخاصة</p>
@@ -367,7 +469,7 @@ function RetailDashboard({ user, onLogout }) {
           </div>
         </div>
 
-        <input type="text" placeholder="ابحث عن منتج أو مورد..." value={query} onChange={(e) => setQuery(e.target.value)}
+        <input type="text" placeholder="ابحث عن منتج..." value={query} onChange={(e) => setQuery(e.target.value)}
           className="w-full rounded-lg px-4 py-3 text-sm outline-none mb-4" style={{ border: `1.5px solid ${BORDER}`, background: "#FFF", color: INK }} />
 
         <div className="flex gap-2 mb-5 overflow-x-auto pb-1">
@@ -382,27 +484,34 @@ function RetailDashboard({ user, onLogout }) {
           })}
         </div>
 
+        {loading && <p className="text-center text-sm py-10" style={{ color: MUTED }}>جاري التحميل...</p>}
+        {!loading && products.length === 0 && (
+          <p className="text-center text-sm py-16" style={{ color: MUTED }}>ماكانش منتجات متوفرة حالياً، رجع بعد شوية</p>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-24">
           {filtered.map((p) => {
             const qty = cart[p.id] || 0;
             return (
               <div key={p.id} className="rounded-xl p-4 flex gap-3" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
-                <div className="w-14 h-14 rounded-lg flex items-center justify-center text-2xl shrink-0" style={{ background: `${TEAL}12` }}>{p.img}</div>
+                <div className="w-14 h-14 rounded-lg overflow-hidden flex items-center justify-center text-2xl shrink-0" style={{ background: `${TEAL}12` }}>
+                  {p.image_url ? <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" /> : "📦"}
+                </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-bold truncate" style={{ color: INK }}>{p.name}</p>
-                  <p className="text-xs" style={{ color: MUTED }}>{p.supplier} · {p.unit}</p>
+                  <p className="text-xs" style={{ color: MUTED }}>{p.unit}</p>
                   <div className="flex items-center justify-between mt-2">
                     <div>
                       <span className="text-sm font-black" style={{ color: TEAL, fontFamily: "'Cairo', sans-serif" }}>{p.price.toLocaleString()} د.ج</span>
                       <span className="text-xs block" style={{ color: GOLD }}>سعرك الخاص</span>
                     </div>
                     {qty === 0 ? (
-                      <button onClick={() => addToCart(p.id, p.moq)} className="rounded-lg px-3 py-1.5 text-xs font-bold text-white" style={{ background: TEAL }}>أضف</button>
+                      <button onClick={() => addToCart(p.id)} className="rounded-lg px-3 py-1.5 text-xs font-bold text-white" style={{ background: TEAL }}>أضف</button>
                     ) : (
                       <div className="flex items-center gap-2 rounded-lg" style={{ border: `1px solid ${TEAL}` }}>
-                        <button onClick={() => changeQty(p.id, -1, p.moq)} className="px-2.5 py-1.5 text-sm font-bold" style={{ color: TEAL }}>−</button>
+                        <button onClick={() => changeQty(p.id, -1)} className="px-2.5 py-1.5 text-sm font-bold" style={{ color: TEAL }}>−</button>
                         <span className="text-xs font-bold" style={{ color: INK }}>{qty}</span>
-                        <button onClick={() => changeQty(p.id, 1, p.moq)} className="px-2.5 py-1.5 text-sm font-bold" style={{ color: TEAL }}>+</button>
+                        <button onClick={() => changeQty(p.id, 1)} className="px-2.5 py-1.5 text-sm font-bold" style={{ color: TEAL }}>+</button>
                       </div>
                     )}
                   </div>
@@ -431,24 +540,154 @@ function RetailDashboard({ user, onLogout }) {
 }
 
 // ============ WHOLESALE DASHBOARD ============
-const RETAILERS = [
-  { id: 1, name: "محل بركة الشرق", city: "قسنطينة", tier: "ذهبي", orders: 12 },
-  { id: 2, name: "سوبيرات النجاح", city: "سطيف", tier: "فضي", orders: 7 },
-  { id: 3, name: "بقالة الأمانة", city: "قسنطينة", tier: "فضي", orders: 4 },
-  { id: 4, name: "محلات وادي الزناتي", city: "عنابة", tier: "ذهبي", orders: 15 },
-];
-const MY_PRODUCTS = [
-  { id: 1, name: "زيت عباد الشمس 5 لتر", unit: "كرتون / 4 وحدات", basePrice: 2600, stock: 340, img: "🛢️" },
-  { id: 2, name: "سكر أبيض 50 كغ", unit: "كيس", basePrice: 7100, stock: 85, img: "🍬" },
-  { id: 3, name: "بسكويت مغطى بالشوكولاطة", unit: "كرتون / 24 علبة", basePrice: 3900, stock: 210, img: "🍪" },
-];
+function AddProductModal({ user, onClose, onAdded }) {
+  const [name, setName] = useState("");
+  const [unit, setUnit] = useState("");
+  const [basePrice, setBasePrice] = useState("");
+  const [stock, setStock] = useState("");
+  const [category, setCategory] = useState("grocery");
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleImagePick = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  };
+
+  const handleSave = async () => {
+    setError("");
+    if (!name || !unit || !basePrice) {
+      setError("خاصك تكتب على الأقل الاسم والوحدة والسعر");
+      return;
+    }
+    setLoading(true);
+    try {
+      let imageUrl = null;
+      if (imageFile) {
+        const path = `${user.userId}/${Date.now()}-${imageFile.name.replace(/\s+/g, "-")}`;
+        imageUrl = await supabaseUploadImage(imageFile, path, user.accessToken);
+      }
+      const product = await supabaseInsertProduct({
+        wholesaler_id: user.userId,
+        name,
+        unit,
+        base_price: Number(basePrice),
+        stock: Number(stock) || 0,
+        category,
+        image_url: imageUrl,
+      }, user.accessToken);
+      onAdded(product);
+    } catch (e) {
+      setError(e.message || "صار خطأ، حاول مرة أخرى");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center" style={{ background: "#00000060" }} onClick={onClose}>
+      <div dir="rtl" className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl p-5 max-h-[90vh] overflow-y-auto" style={{ background: "#FFF" }} onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-black" style={{ color: INK }}>منتج جديد</h3>
+          <button onClick={onClose} className="text-sm font-bold" style={{ color: MUTED }}>✕</button>
+        </div>
+
+        <label className="block mb-4">
+          <div className="w-full h-32 rounded-xl flex items-center justify-center overflow-hidden" style={{ background: SURFACE, border: `1.5px dashed ${BORDER}` }}>
+            {imagePreview ? (
+              <img src={imagePreview} alt="معاينة" className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-xs" style={{ color: MUTED }}>اضغط لاختيار صورة المنتج</span>
+            )}
+          </div>
+          <input type="file" accept="image/*" onChange={handleImagePick} className="hidden" />
+        </label>
+
+        <div className="space-y-3">
+          <input type="text" placeholder="اسم المنتج" value={name} onChange={(e) => setName(e.target.value)}
+            className="w-full rounded-lg px-4 py-3 text-sm outline-none" style={{ border: `1.5px solid ${BORDER}`, color: INK }} />
+          <input type="text" placeholder="الوحدة (مثلاً: كرتون / 4 وحدات)" value={unit} onChange={(e) => setUnit(e.target.value)}
+            className="w-full rounded-lg px-4 py-3 text-sm outline-none" style={{ border: `1.5px solid ${BORDER}`, color: INK }} />
+          <div className="flex gap-3">
+            <input type="number" placeholder="السعر الأساسي (د.ج)" value={basePrice} onChange={(e) => setBasePrice(e.target.value)}
+              className="flex-1 rounded-lg px-4 py-3 text-sm outline-none" style={{ border: `1.5px solid ${BORDER}`, color: INK }} />
+            <input type="number" placeholder="المخزون" value={stock} onChange={(e) => setStock(e.target.value)}
+              className="flex-1 rounded-lg px-4 py-3 text-sm outline-none" style={{ border: `1.5px solid ${BORDER}`, color: INK }} />
+          </div>
+          <select value={category} onChange={(e) => setCategory(e.target.value)}
+            className="w-full rounded-lg px-4 py-3 text-sm outline-none" style={{ border: `1.5px solid ${BORDER}`, color: INK }}>
+            {CATEGORIES.filter((c) => c.id !== "all").map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+          </select>
+
+          {error && <div className="rounded-lg px-3 py-2.5 text-xs font-semibold" style={{ background: `${CLAY}12`, color: CLAY }}>{error}</div>}
+
+          <button onClick={handleSave} disabled={loading} className="w-full rounded-lg py-3 text-sm font-bold text-white" style={{ background: GOLD, opacity: loading ? 0.6 : 1 }}>
+            {loading ? "جاري الحفظ..." : "حفظ المنتج"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function WholesaleDashboard({ user, onLogout }) {
   const [tab, setTab] = useState("products");
-  const [selectedProduct, setSelectedProduct] = useState(MY_PRODUCTS[0].id);
-  const [customPrices, setCustomPrices] = useState({ 1: { 1: 2450, 4: 2400 }, 2: { 1: 6800 } });
-  const product = MY_PRODUCTS.find((p) => p.id === selectedProduct);
-  const setPrice = (retailerId, value) => setCustomPrices((prev) => ({ ...prev, [selectedProduct]: { ...prev[selectedProduct], [retailerId]: value === "" ? undefined : Number(value) } }));
+  const [products, setProducts] = useState([]);
+  const [retailers, setRetailers] = useState([]);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [customPrices, setCustomPrices] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [showAddModal, setShowAddModal] = useState(false);
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const [prods, rets] = await Promise.all([
+          supabaseGetMyProducts(user.userId, user.accessToken),
+          supabaseGetRetailers(user.accessToken),
+        ]);
+        setProducts(prods);
+        setRetailers(rets);
+        if (prods.length > 0) setSelectedProduct(prods[0].id);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const openPricing = async (productId) => {
+    setSelectedProduct(productId);
+    setTab("pricing");
+    try {
+      const prices = await supabaseGetCustomPricesForProduct(productId, user.accessToken);
+      const map = {};
+      prices.forEach((p) => { map[p.retailer_id] = p.price; });
+      setCustomPrices((prev) => ({ ...prev, [productId]: map }));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const setPrice = async (retailerId, value) => {
+    setCustomPrices((prev) => ({ ...prev, [selectedProduct]: { ...prev[selectedProduct], [retailerId]: value === "" ? undefined : Number(value) } }));
+    try {
+      if (value === "") {
+        await supabaseDeleteCustomPrice(selectedProduct, retailerId, user.accessToken);
+      } else {
+        await supabaseUpsertCustomPrice(selectedProduct, retailerId, Number(value), user.accessToken);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const product = products.find((p) => p.id === selectedProduct);
 
   return (
     <div dir="rtl" className="min-h-screen w-full" style={{ background: SURFACE, fontFamily: "'IBM Plex Sans Arabic', sans-serif" }}>
@@ -457,75 +696,103 @@ function WholesaleDashboard({ user, onLogout }) {
         user={user} onLogout={onLogout} accent={GOLD}
         tabs={[{ id: "products", label: "منتجاتي" }, { id: "pricing", label: "الأسعار الخاصة" }, { id: "retailers", label: "التجار" }]}
         activeTab={tab} onTabChange={setTab}
-        extra={<button className="rounded-lg px-4 py-2 text-xs font-bold text-white" style={{ background: GOLD }}>+ منتج جديد</button>}
+        extra={<button onClick={() => setShowAddModal(true)} className="rounded-lg px-4 py-2 text-xs font-bold text-white" style={{ background: GOLD }}>+ منتج جديد</button>}
       />
       <main className="max-w-5xl mx-auto px-5 py-6">
-        {tab === "products" && (
+        {loading && <p className="text-center text-sm py-10" style={{ color: MUTED }}>جاري التحميل...</p>}
+
+        {!loading && tab === "products" && (
           <div className="space-y-3">
-            {MY_PRODUCTS.map((p) => (
+            {products.length === 0 && (
+              <div className="text-center py-16">
+                <p className="text-sm mb-3" style={{ color: MUTED }}>ماعندكش منتجات بعد</p>
+                <button onClick={() => setShowAddModal(true)} className="text-xs font-bold px-4 py-2 rounded-lg text-white" style={{ background: GOLD }}>أضف أول منتج</button>
+              </div>
+            )}
+            {products.map((p) => (
               <div key={p.id} className="rounded-xl p-4 flex items-center gap-4" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
-                <div className="w-14 h-14 rounded-lg flex items-center justify-center text-2xl shrink-0" style={{ background: `${GOLD}12` }}>{p.img}</div>
+                <div className="w-14 h-14 rounded-lg overflow-hidden shrink-0 flex items-center justify-center text-2xl" style={{ background: `${GOLD}12` }}>
+                  {p.image_url ? <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" /> : "📦"}
+                </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-bold" style={{ color: INK }}>{p.name}</p>
                   <p className="text-xs" style={{ color: MUTED }}>{p.unit}</p>
                   <div className="flex gap-2 mt-1.5">
-                    <Pill tone="teal">السعر الأساسي {p.basePrice.toLocaleString()} د.ج</Pill>
+                    <Pill tone="teal">السعر الأساسي {Number(p.base_price).toLocaleString()} د.ج</Pill>
                     <Pill tone={p.stock < 100 ? "gold" : "muted"}>المخزون {p.stock}</Pill>
                   </div>
                 </div>
-                <button onClick={() => { setSelectedProduct(p.id); setTab("pricing"); }} className="text-xs font-bold px-3 py-2 rounded-lg shrink-0" style={{ color: GOLD, border: `1px solid ${GOLD}` }}>الأسعار الخاصة</button>
+                <button onClick={() => openPricing(p.id)} className="text-xs font-bold px-3 py-2 rounded-lg shrink-0" style={{ color: GOLD, border: `1px solid ${GOLD}` }}>الأسعار الخاصة</button>
               </div>
             ))}
           </div>
         )}
-        {tab === "pricing" && (
-          <div>
-            <div className="mb-4">
-              <label className="block text-xs font-semibold mb-2" style={{ color: INK }}>اختر المنتج</label>
-              <select value={selectedProduct} onChange={(e) => setSelectedProduct(Number(e.target.value))} className="w-full rounded-lg px-4 py-3 text-sm outline-none" style={{ border: `1.5px solid ${BORDER}`, background: "#FFF", color: INK }}>
-                {MY_PRODUCTS.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </div>
-            <div className="rounded-xl p-4 mb-4" style={{ background: `${GOLD}10`, border: `1px solid ${GOLD}40` }}>
-              <p className="text-xs" style={{ color: INK }}><strong>هذي الأسعار خاصة</strong> — كل تاجر يشوف السعر المخصص ليه فقط. باقي التجار ما يشوفوش سعر غيرهم، ولا حتى قائمة عامة.</p>
-            </div>
-            <div className="rounded-xl overflow-hidden" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
-              {RETAILERS.map((r, i) => {
-                const custom = customPrices[selectedProduct]?.[r.id];
-                return (
-                  <div key={r.id} className="flex items-center gap-3 px-4 py-3" style={{ borderBottom: i < RETAILERS.length - 1 ? `1px solid ${BORDER}` : "none" }}>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold truncate" style={{ color: INK }}>{r.name}</p>
-                      <div className="flex gap-1.5 mt-0.5">
-                        <span className="text-xs" style={{ color: MUTED }}>{r.city}</span>
-                        <Pill tone={r.tier === "ذهبي" ? "gold" : "muted"}>{r.tier}</Pill>
+
+        {!loading && tab === "pricing" && (
+          products.length === 0 ? (
+            <p className="text-center text-sm py-10" style={{ color: MUTED }}>زيد منتج أول من تبويب "منتجاتي"</p>
+          ) : (
+            <div>
+              <div className="mb-4">
+                <label className="block text-xs font-semibold mb-2" style={{ color: INK }}>اختر المنتج</label>
+                <select value={selectedProduct || ""} onChange={(e) => openPricing(e.target.value)} className="w-full rounded-lg px-4 py-3 text-sm outline-none" style={{ border: `1.5px solid ${BORDER}`, background: "#FFF", color: INK }}>
+                  {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <div className="rounded-xl p-4 mb-4" style={{ background: `${GOLD}10`, border: `1px solid ${GOLD}40` }}>
+                <p className="text-xs" style={{ color: INK }}><strong>هذي الأسعار خاصة</strong> — كل تاجر يشوف السعر المخصص ليه فقط، ومحفوظة فعلياً في قاعدة البيانات.</p>
+              </div>
+              {retailers.length === 0 ? (
+                <p className="text-center text-sm py-6" style={{ color: MUTED }}>ماعندكش تجار مسجلين بعد</p>
+              ) : (
+                <div className="rounded-xl overflow-hidden" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
+                  {retailers.map((r, i) => {
+                    const custom = customPrices[selectedProduct]?.[r.id];
+                    return (
+                      <div key={r.id} className="flex items-center gap-3 px-4 py-3" style={{ borderBottom: i < retailers.length - 1 ? `1px solid ${BORDER}` : "none" }}>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold truncate" style={{ color: INK }}>{r.full_name}</p>
+                          <span className="text-xs" style={{ color: MUTED }}>{r.city || "—"}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <input type="number" placeholder={product ? Number(product.base_price).toString() : ""} value={custom ?? ""} onChange={(e) => setPrice(r.id, e.target.value)} className="w-24 rounded-lg px-3 py-2 text-sm text-left outline-none" style={{ border: `1.5px solid ${custom ? TEAL : BORDER}`, color: INK }} />
+                          <span className="text-xs" style={{ color: MUTED }}>د.ج</span>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <input type="number" placeholder={product.basePrice.toString()} value={custom ?? ""} onChange={(e) => setPrice(r.id, e.target.value)} className="w-24 rounded-lg px-3 py-2 text-sm text-left outline-none" style={{ border: `1.5px solid ${custom ? TEAL : BORDER}`, color: INK }} />
-                      <span className="text-xs" style={{ color: MUTED }}>د.ج</span>
-                    </div>
-                  </div>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              )}
+              {product && <p className="text-xs mt-2" style={{ color: MUTED }}>اترك الحقل فارغ باش يتفعل السعر الأساسي ({Number(product.base_price).toLocaleString()} د.ج) تلقائياً.</p>}
             </div>
-            <p className="text-xs mt-2" style={{ color: MUTED }}>اترك الحقل فارغ باش يتفعل السعر الأساسي ({product.basePrice.toLocaleString()} د.ج) تلقائياً.</p>
-          </div>
+          )
         )}
-        {tab === "retailers" && (
+
+        {!loading && tab === "retailers" && (
           <div className="space-y-3">
-            {RETAILERS.map((r) => (
+            {retailers.length === 0 && <p className="text-center text-sm py-10" style={{ color: MUTED }}>ماعندكش تجار مسجلين بعد</p>}
+            {retailers.map((r) => (
               <div key={r.id} className="rounded-xl p-4 flex items-center justify-between" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
                 <div>
-                  <p className="text-sm font-bold" style={{ color: INK }}>{r.name}</p>
-                  <p className="text-xs" style={{ color: MUTED }}>{r.city} · {r.orders} طلب</p>
+                  <p className="text-sm font-bold" style={{ color: INK }}>{r.full_name}</p>
+                  <p className="text-xs" style={{ color: MUTED }}>{r.city || "—"} · {r.phone || "—"}</p>
                 </div>
-                <Pill tone={r.tier === "ذهبي" ? "gold" : "muted"}>{r.tier}</Pill>
               </div>
             ))}
           </div>
         )}
       </main>
+
+      {showAddModal && (
+        <AddProductModal
+          user={user}
+          onClose={() => setShowAddModal(false)}
+          onAdded={(newProduct) => {
+            setProducts((prev) => [newProduct, ...prev]);
+            setShowAddModal(false);
+          }}
+        />
+      )}
     </div>
   );
 }
