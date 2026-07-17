@@ -41,6 +41,20 @@ async function supabaseGetProfile(userId, accessToken) {
   return data[0] || null;
 }
 
+async function supabaseUpdateProfile(userId, fields, accessToken) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json", apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${accessToken}`, Prefer: "return=representation",
+    },
+    body: JSON.stringify(fields),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error("تعذر حفظ التعديلات");
+  return data[0];
+}
+
 // جلب منتجات تاجر جملة معيّن
 async function supabaseGetMyProducts(wholesalerId, accessToken) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/products?wholesaler_id=eq.${wholesalerId}&select=*&order=created_at.desc`, {
@@ -294,14 +308,17 @@ function Pill({ children, tone }) {
 }
 
 // ============ TOP NAV (shared shell for all logged-in screens) ============
-function AppHeader({ user, onLogout, accent, tabs, activeTab, onTabChange, extra }) {
+function AppHeader({ user, onLogout, accent, tabs, activeTab, onTabChange, extra, onOpenProfile }) {
   return (
     <header className="sticky top-0 z-20" style={{ background: "#FFFFFF", borderBottom: `1px solid ${BORDER}` }}>
       <div className="max-w-5xl mx-auto px-5 py-4 flex items-center justify-between">
-        <div>
+        <button onClick={onOpenProfile} className="text-right" disabled={!onOpenProfile}>
           <h1 className="text-lg font-black" style={{ color: INK, fontFamily: "'Cairo', sans-serif" }}>سوق الجملة</h1>
-          <p className="text-xs" style={{ color: MUTED }}>{user.name} · {user.roleLabel}</p>
-        </div>
+          <p className="text-xs flex items-center gap-1" style={{ color: MUTED }}>
+            {user.name} · {user.roleLabel}
+            {onOpenProfile && <span style={{ color: accent }}>✏️</span>}
+          </p>
+        </button>
         <div className="flex items-center gap-2">
           {extra}
           <button
@@ -559,6 +576,8 @@ function RetailDashboard({ user, onLogout }) {
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState("");
   const [checkoutSuccess, setCheckoutSuccess] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
+  const [displayName, setDisplayName] = useState(user.name);
 
   const loadProducts = async () => {
     try {
@@ -642,9 +661,10 @@ function RetailDashboard({ user, onLogout }) {
     <div dir="rtl" className="min-h-screen w-full" style={{ background: SURFACE, fontFamily: "'IBM Plex Sans Arabic', sans-serif" }}>
       {FONTS}
       <AppHeader
-        user={user}
+        user={{ ...user, name: displayName }}
         onLogout={onLogout}
         accent={TEAL}
+        onOpenProfile={() => setShowProfile(true)}
         tabs={[{ id: "products", label: "المنتجات" }, { id: "orders", label: `طلباتي (${orders.length})` }]}
         activeTab={tab} onTabChange={setTab}
         extra={
@@ -653,6 +673,13 @@ function RetailDashboard({ user, onLogout }) {
           </div>
         }
       />
+      {showProfile && (
+        <ProfileModal
+          user={user}
+          onClose={() => setShowProfile(false)}
+          onSaved={(updated) => { setDisplayName(updated.name); setShowProfile(false); }}
+        />
+      )}
       <main className="max-w-5xl mx-auto px-5 py-6">
         {tab === "products" && (
           <>
@@ -780,6 +807,85 @@ function RetailDashboard({ user, onLogout }) {
 }
 
 // ============ WHOLESALE DASHBOARD ============
+function ProfileModal({ user, onClose, onSaved }) {
+  const [fullName, setFullName] = useState(user.name || "");
+  const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [fetching, setFetching] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const profile = await supabaseGetProfile(user.userId, user.accessToken);
+        if (profile) {
+          setFullName(profile.full_name || "");
+          setAddress(profile.address || "");
+          setCity(profile.city || "");
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setFetching(false);
+      }
+    })();
+  }, []);
+
+  const handleSave = async () => {
+    setError("");
+    if (!fullName) {
+      setError("خاصك تكتب الاسم");
+      return;
+    }
+    setLoading(true);
+    try {
+      await supabaseUpdateProfile(user.userId, { full_name: fullName, address, city }, user.accessToken);
+      onSaved({ name: fullName, address, city });
+    } catch (e) {
+      setError(e.message || "صار خطأ، حاول مرة أخرى");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center" style={{ background: "#00000060" }} onClick={onClose}>
+      <div dir="rtl" className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl p-5 max-h-[90vh] overflow-y-auto" style={{ background: "#FFF" }} onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-black" style={{ color: INK }}>الملف الشخصي</h3>
+          <button onClick={onClose} className="text-sm font-bold" style={{ color: MUTED }}>✕</button>
+        </div>
+        <div className="space-y-3">
+          {fetching && <p className="text-center text-xs py-4" style={{ color: MUTED }}>جاري التحميل...</p>}
+          <div>
+            <label className="block text-xs font-semibold mb-1.5" style={{ color: INK }}>الاسم / اسم المحل</label>
+            <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)}
+              className="w-full rounded-lg px-4 py-3 text-sm outline-none" style={{ border: `1.5px solid ${BORDER}`, color: INK }} />
+          </div>
+          {user.role !== "driver" && (
+            <div>
+              <label className="block text-xs font-semibold mb-1.5" style={{ color: INK }}>العنوان بالتفصيل</label>
+              <input type="text" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="مثلاً: حي النصر، شارع 5 جويلية"
+                className="w-full rounded-lg px-4 py-3 text-sm outline-none" style={{ border: `1.5px solid ${BORDER}`, color: INK }} />
+              <p className="text-xs mt-1" style={{ color: MUTED }}>هذا العنوان يشوفو السائق باش يوصل الطلبية</p>
+            </div>
+          )}
+          <div>
+            <label className="block text-xs font-semibold mb-1.5" style={{ color: INK }}>المدينة</label>
+            <input type="text" value={city} onChange={(e) => setCity(e.target.value)} placeholder="مثلاً: قسنطينة"
+              className="w-full rounded-lg px-4 py-3 text-sm outline-none" style={{ border: `1.5px solid ${BORDER}`, color: INK }} />
+          </div>
+          {error && <div className="rounded-lg px-3 py-2.5 text-xs font-semibold" style={{ background: `${CLAY}12`, color: CLAY }}>{error}</div>}
+          <button onClick={handleSave} disabled={loading} className="w-full rounded-lg py-3 text-sm font-bold text-white" style={{ background: TEAL, opacity: loading ? 0.6 : 1 }}>
+            {loading ? "جاري الحفظ..." : "حفظ التعديلات"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AddProductModal({ user, onClose, onAdded }) {
   const [name, setName] = useState("");
   const [unit, setUnit] = useState("");
@@ -883,6 +989,8 @@ function WholesaleDashboard({ user, onLogout }) {
   const [customPrices, setCustomPrices] = useState({});
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
+  const [displayName, setDisplayName] = useState(user.name);
 
   const loadOrders = async () => {
     try {
@@ -953,11 +1061,19 @@ function WholesaleDashboard({ user, onLogout }) {
     <div dir="rtl" className="min-h-screen w-full" style={{ background: SURFACE, fontFamily: "'IBM Plex Sans Arabic', sans-serif" }}>
       {FONTS}
       <AppHeader
-        user={user} onLogout={onLogout} accent={GOLD}
+        user={{ ...user, name: displayName }} onLogout={onLogout} accent={GOLD}
+        onOpenProfile={() => setShowProfile(true)}
         tabs={[{ id: "products", label: "منتجاتي" }, { id: "orders", label: `الطلبات (${orders.filter((o) => o.status === "pending").length})` }, { id: "pricing", label: "الأسعار الخاصة" }, { id: "retailers", label: "التجار" }]}
         activeTab={tab} onTabChange={setTab}
         extra={<button onClick={() => setShowAddModal(true)} className="rounded-lg px-4 py-2 text-xs font-bold text-white" style={{ background: GOLD }}>+ منتج جديد</button>}
       />
+      {showProfile && (
+        <ProfileModal
+          user={user}
+          onClose={() => setShowProfile(false)}
+          onSaved={(updated) => { setDisplayName(updated.name); setShowProfile(false); }}
+        />
+      )}
       <main className="max-w-5xl mx-auto px-5 py-6">
         {loading && <p className="text-center text-sm py-10" style={{ color: MUTED }}>جاري التحميل...</p>}
 
@@ -1136,6 +1252,8 @@ function DriverDashboard({ user, onLogout }) {
   const [tab, setTab] = useState("active");
   const [online, setOnline] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [showProfile, setShowProfile] = useState(false);
+  const [displayName, setDisplayName] = useState(user.name);
 
   const loadAll = async () => {
     try {
@@ -1185,7 +1303,8 @@ function DriverDashboard({ user, onLogout }) {
     <div dir="rtl" className="min-h-screen w-full" style={{ background: SURFACE, fontFamily: "'IBM Plex Sans Arabic', sans-serif" }}>
       {FONTS}
       <AppHeader
-        user={user} onLogout={onLogout} accent={CLAY}
+        user={{ ...user, name: displayName }} onLogout={onLogout} accent={CLAY}
+        onOpenProfile={() => setShowProfile(true)}
         tabs={[{ id: "active", label: `طلبات متاحة (${available.length})` }, { id: "mine", label: `طلباتي (${activeMyOrders.length})` }, { id: "history", label: "السجل" }]}
         activeTab={tab} onTabChange={setTab}
         extra={
@@ -1195,6 +1314,13 @@ function DriverDashboard({ user, onLogout }) {
           </button>
         }
       />
+      {showProfile && (
+        <ProfileModal
+          user={user}
+          onClose={() => setShowProfile(false)}
+          onSaved={(updated) => { setDisplayName(updated.name); setShowProfile(false); }}
+        />
+      )}
       <main className="max-w-5xl mx-auto px-5 py-6">
         <div className="rounded-xl p-4 mb-5 flex items-center justify-between" style={{ background: INK }}>
           <div>
