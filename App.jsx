@@ -354,65 +354,54 @@ function AppHeader({ user, onLogout, accent, tabs, activeTab, onTabChange, extra
 
 // ============ LOGIN SCREEN ============
 function LandingPage({ onStart }) {
-  const steps = [
-    { n: "١", title: "تسجل مجاناً", desc: "كتاجر تجزئة، تاجر جملة، أو سائق توصيل" },
-    { n: "٢", title: "تشتري بسعرك الخاص", desc: "كل مورد يحدد لك سعر خاص، غير مرئي لباقي التجار" },
-    { n: "٣", title: "توصلك الطلبية", desc: "سائق يوصل طلبك مباشرة من المورد لمحلك" },
-  ];
   return (
-    <div dir="rtl" className="min-h-screen w-full relative overflow-hidden" style={{ background: SURFACE, fontFamily: "'IBM Plex Sans Arabic', sans-serif" }}>
+    <div dir="rtl" className="h-screen w-full relative overflow-hidden flex flex-col" style={{ background: SURFACE, fontFamily: "'IBM Plex Sans Arabic', sans-serif" }}>
       {FONTS}
       <ZelligePattern color={TEAL} />
 
-      <div className="relative z-10 max-w-2xl mx-auto px-6 pt-16 pb-10">
+      <div className="relative z-10 flex-1 flex flex-col justify-between max-w-2xl w-full mx-auto px-6 py-6 min-h-0">
         {/* Hero */}
-        <div className="text-center mb-14">
-          <div className="inline-flex items-center justify-center mb-5">
+        <div className="text-center shrink-0 rounded-3xl px-5 pt-7 pb-6 relative overflow-hidden" style={{ background: `linear-gradient(150deg, ${INK} 0%, #1F3B3A 55%, ${TEAL} 100%)` }}>
+          <svg width="100%" height="100%" className="absolute inset-0" style={{ color: "#FFF", opacity: 0.07 }}>
+            <defs>
+              <pattern id="landing-zellige" width="48" height="48" patternUnits="userSpaceOnUse">
+                <g fill="none" stroke="currentColor" strokeWidth="1">
+                  <path d="M24 3 L31 12 L24 21 L17 12 Z" />
+                  <circle cx="24" cy="24" r="4" />
+                </g>
+              </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#landing-zellige)" />
+          </svg>
+          <div className="relative inline-flex items-center justify-center mb-3">
             <StarBadge>خاص<br />بيك</StarBadge>
           </div>
-          <h1 className="text-4xl font-black tracking-tight mb-3" style={{ fontFamily: "'Cairo', sans-serif", color: INK }}>سوق الجملة</h1>
-          <p className="text-base leading-relaxed" style={{ color: MUTED }}>
-            منصة تربط تجار التجزئة بموردي الجملة في الجزائر — مباشرة، بلا وسطاء، وبأسعار خاصة يحددها كل مورد لكل تاجر.
+          <h1 className="relative text-3xl font-black tracking-tight mb-2" style={{ fontFamily: "'Cairo', sans-serif", color: "#FFF" }}>سوق الجملة</h1>
+          <div className="relative w-10 h-0.5 rounded-full mx-auto mb-3" style={{ background: GOLD }} />
+          <p className="relative text-sm leading-relaxed px-2" style={{ color: "#D9E4E2" }}>
+            منصة تربط تجار التجزئة بموردي الجملة في الجزائر — مباشرة، بلا وسطاء، وبأسعار خاصة لكل تاجر.
           </p>
         </div>
 
         {/* Role cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-14">
+        <div className="grid grid-cols-3 gap-2 shrink-0">
           {ROLES.map((r) => (
-            <div key={r.id} className="rounded-2xl p-5 text-center" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-3" style={{ background: `${r.accent}15`, color: r.accent }}>
+            <div key={r.id} className="rounded-xl py-3 px-2 text-center" style={{ background: `${r.accent}0D`, border: `1px solid ${r.accent}35` }}>
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center mx-auto mb-1.5" style={{ background: `${r.accent}20`, color: r.accent }}>
                 {r.icon}
               </div>
-              <p className="text-sm font-black mb-1" style={{ color: INK }}>{r.label}</p>
-              <p className="text-xs" style={{ color: MUTED }}>{r.sub}</p>
+              <p className="text-xs font-black" style={{ color: INK }}>{r.label}</p>
             </div>
           ))}
         </div>
 
-        {/* How it works */}
-        <div className="mb-14">
-          <h2 className="text-sm font-black text-center mb-6" style={{ color: INK, fontFamily: "'Cairo', sans-serif" }}>كيفاش تخدم المنصة</h2>
-          <div className="space-y-4">
-            {steps.map((s, i) => (
-              <div key={s.n} className="flex items-start gap-4">
-                <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 font-black text-sm" style={{ background: `${TEAL}15`, color: TEAL, fontFamily: "'Cairo', sans-serif" }}>
-                  {s.n}
-                </div>
-                <div className="flex-1 pt-1">
-                  <p className="text-sm font-bold mb-0.5" style={{ color: INK }}>{s.title}</p>
-                  <p className="text-xs" style={{ color: MUTED }}>{s.desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
         {/* CTA */}
-        <button onClick={onStart} className="w-full rounded-xl py-4 text-sm font-black text-white transition-transform active:scale-95" style={{ background: TEAL }}>
-          ابدأ الآن — سجل حسابك مجاناً
-        </button>
-
-        <p className="text-center text-xs mt-6" style={{ color: "#A79E8E" }}>سوق الجملة © 2026 — الجزائر</p>
+        <div className="shrink-0">
+          <button onClick={onStart} className="w-full rounded-xl py-4 text-sm font-black text-white transition-transform active:scale-95 shadow-lg" style={{ background: `linear-gradient(90deg, ${TEAL}, #0A4A45)` }}>
+            ابدأ الآن — سجل حسابك مجاناً
+          </button>
+          <p className="text-center text-xs mt-3" style={{ color: "#A79E8E" }}>سوق الجملة © 2026 — الجزائر</p>
+        </div>
       </div>
     </div>
   );
