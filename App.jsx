@@ -693,6 +693,10 @@ function RetailDashboard({ user, onLogout }) {
                 <p className="text-xl font-black mt-1" style={{ color: INK, fontFamily: "'Cairo', sans-serif" }}>{cartTotal.toLocaleString()} د.ج</p>
               </div>
               <div className="rounded-xl p-4 flex-1 min-w-max" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
+                <p className="text-xs font-medium" style={{ color: MUTED }}>إجمالي مشترياتك</p>
+                <p className="text-xl font-black mt-1" style={{ color: TEAL, fontFamily: "'Cairo', sans-serif" }}>{orders.reduce((s, o) => s + Number(o.total), 0).toLocaleString()} د.ج</p>
+              </div>
+              <div className="rounded-xl p-4 flex-1 min-w-max" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
                 <p className="text-xs font-medium" style={{ color: MUTED }}>أسعارك الخاصة</p>
                 <p className="text-xl font-black mt-1" style={{ color: INK, fontFamily: "'Cairo', sans-serif" }}>نشطة</p>
                 <p className="text-xs mt-0.5" style={{ color: GOLD }}>غير مرئية للتجار الآخرين</p>
@@ -1079,6 +1083,20 @@ function WholesaleDashboard({ user, onLogout }) {
 
         {!loading && tab === "products" && (
           <div className="space-y-3">
+            <div className="flex gap-3 mb-3 flex-wrap">
+              <div className="rounded-xl p-4 flex-1 min-w-max" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
+                <p className="text-xs font-medium" style={{ color: MUTED }}>منتجاتك</p>
+                <p className="text-xl font-black mt-1" style={{ color: INK, fontFamily: "'Cairo', sans-serif" }}>{products.length}</p>
+              </div>
+              <div className="rounded-xl p-4 flex-1 min-w-max" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
+                <p className="text-xs font-medium" style={{ color: MUTED }}>طلبات قيد الانتظار</p>
+                <p className="text-xl font-black mt-1" style={{ color: GOLD, fontFamily: "'Cairo', sans-serif" }}>{orders.filter((o) => o.status === "pending").length}</p>
+              </div>
+              <div className="rounded-xl p-4 flex-1 min-w-max" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
+                <p className="text-xs font-medium" style={{ color: MUTED }}>إجمالي المبيعات</p>
+                <p className="text-xl font-black mt-1" style={{ color: TEAL, fontFamily: "'Cairo', sans-serif" }}>{orders.filter((o) => o.status !== "pending").reduce((s, o) => s + Number(o.total), 0).toLocaleString()} د.ج</p>
+              </div>
+            </div>
             {products.length === 0 && (
               <div className="text-center py-16">
                 <p className="text-sm mb-3" style={{ color: MUTED }}>ماعندكش منتجات بعد</p>
