@@ -353,15 +353,46 @@ function AppHeader({ user, onLogout, accent, tabs, activeTab, onTabChange, extra
 }
 
 // ============ LOGIN SCREEN ============
+function CornerFlourish({ flip }) {
+  return (
+    <svg viewBox="0 0 120 120" className="absolute w-16 h-16" style={{ color: GOLD, opacity: 0.35, transform: flip ? "scaleX(-1) scaleY(-1)" : "none", top: flip ? "auto" : 0, bottom: flip ? 0 : "auto", right: 0 }}>
+      <path d="M0 40 C0 15 15 0 40 0 L120 0" fill="none" stroke="currentColor" strokeWidth="2" />
+      <path d="M0 60 C0 25 25 0 60 0" fill="none" stroke="currentColor" strokeWidth="1" />
+    </svg>
+  );
+}
+
+function LeafIcon({ className, style }) {
+  return (
+    <svg viewBox="0 0 60 100" className={className} style={style}>
+      <path d="M30 5 C50 20 52 55 30 95 C8 55 10 20 30 5Z" fill="currentColor" opacity="0.7" />
+      <path d="M30 15 L30 88" stroke="#00000030" strokeWidth="1.5" fill="none" />
+    </svg>
+  );
+}
+
 function LandingPage({ onStart }) {
+  const network = [
+    { x: 22, y: 40, color: GOLD },
+    { x: 50, y: 70, color: "#F4D35E" },
+    { x: 78, y: 35, color: GOLD },
+  ];
   return (
     <div dir="rtl" className="h-screen w-full relative overflow-hidden flex flex-col" style={{ background: SURFACE, fontFamily: "'IBM Plex Sans Arabic', sans-serif" }}>
       {FONTS}
       <ZelligePattern color={TEAL} />
+      <div className="absolute top-0 right-0" style={{ color: "#8FA98F" }}>
+        <LeafIcon className="w-14 h-24" style={{ transform: "rotate(20deg)" }} />
+      </div>
+      <div className="absolute bottom-16 left-0" style={{ color: "#8FA98F" }}>
+        <LeafIcon className="w-12 h-20" style={{ transform: "rotate(-30deg)" }} />
+      </div>
 
       <div className="relative z-10 flex-1 flex flex-col justify-between max-w-2xl w-full mx-auto px-6 py-6 min-h-0">
         {/* Hero */}
-        <div className="text-center shrink-0 rounded-3xl px-5 pt-7 pb-6 relative overflow-hidden" style={{ background: `linear-gradient(150deg, ${INK} 0%, #1F3B3A 55%, ${TEAL} 100%)` }}>
+        <div className="text-center shrink-0 rounded-3xl px-5 pt-7 pb-6 relative overflow-hidden" style={{ background: `linear-gradient(150deg, ${INK} 0%, #1F3B3A 55%, ${TEAL} 100%)`, boxShadow: "0 10px 30px rgba(15,60,55,0.25)" }}>
+          <CornerFlourish />
+          <CornerFlourish flip />
           <svg width="100%" height="100%" className="absolute inset-0" style={{ color: "#FFF", opacity: 0.07 }}>
             <defs>
               <pattern id="landing-zellige" width="48" height="48" patternUnits="userSpaceOnUse">
@@ -378,17 +409,31 @@ function LandingPage({ onStart }) {
           </div>
           <h1 className="relative text-3xl font-black tracking-tight mb-2" style={{ fontFamily: "'Cairo', sans-serif", color: "#FFF" }}>سوق الجملة</h1>
           <div className="relative w-10 h-0.5 rounded-full mx-auto mb-3" style={{ background: GOLD }} />
-          <p className="relative text-sm leading-relaxed px-2" style={{ color: "#D9E4E2" }}>
-            منصة تربط تجار التجزئة بموردي الجملة في الجزائر — مباشرة، بلا وسطاء، وبأسعار خاصة لكل تاجر.
+          <p className="relative text-sm leading-relaxed px-2 mb-4" style={{ color: "#D9E4E2" }}>
+            منصة تربط تجار التجزئة بموردي الجملة وسائقي التوصيل في الجزائر — مباشرة، بلا وسطاء.
           </p>
+
+          {/* Glowing network visual */}
+          <div className="relative mx-auto" style={{ width: "100%", maxWidth: 220, height: 90 }}>
+            <svg viewBox="0 0 100 90" className="absolute inset-0 w-full h-full">
+              <path d={`M${network[0].x} ${network[0].y} Q 36 5 ${network[1].x} ${network[1].y}`} fill="none" stroke={GOLD} strokeWidth="0.8" opacity="0.7" />
+              <path d={`M${network[1].x} ${network[1].y} Q 64 12 ${network[2].x} ${network[2].y}`} fill="none" stroke={GOLD} strokeWidth="0.8" opacity="0.7" />
+              {network.map((p, i) => (
+                <g key={i}>
+                  <circle cx={p.x} cy={p.y} r="4.5" fill={p.color} opacity="0.25" />
+                  <circle cx={p.x} cy={p.y} r="2" fill={p.color} />
+                </g>
+              ))}
+            </svg>
+          </div>
         </div>
 
-        {/* Role cards */}
+        {/* Role badges */}
         <div className="grid grid-cols-3 gap-2 shrink-0">
           {ROLES.map((r) => (
-            <div key={r.id} className="rounded-xl py-3 px-2 text-center" style={{ background: `${r.accent}0D`, border: `1px solid ${r.accent}35` }}>
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center mx-auto mb-1.5" style={{ background: `${r.accent}20`, color: r.accent }}>
-                {r.icon}
+            <div key={r.id} className="rounded-2xl py-4 px-2 text-center" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
+              <div className="w-11 h-11 rounded-full flex items-center justify-center mx-auto mb-2" style={{ background: r.accent, color: "#FFF" }}>
+                <div style={{ transform: "scale(0.75)" }}>{r.icon}</div>
               </div>
               <p className="text-xs font-black" style={{ color: INK }}>{r.label}</p>
             </div>
@@ -397,7 +442,8 @@ function LandingPage({ onStart }) {
 
         {/* CTA */}
         <div className="shrink-0">
-          <button onClick={onStart} className="w-full rounded-xl py-4 text-sm font-black text-white transition-transform active:scale-95 shadow-lg" style={{ background: `linear-gradient(90deg, ${TEAL}, #0A4A45)` }}>
+          <button onClick={onStart} className="w-full rounded-full py-4 text-sm font-black text-white transition-transform active:scale-95 shadow-lg flex items-center justify-center gap-2" style={{ background: `linear-gradient(90deg, ${TEAL}, #0A4A45)` }}>
+            <span style={{ color: GOLD }}>✦</span>
             ابدأ الآن — سجل حسابك مجاناً
           </button>
           <p className="text-center text-xs mt-3" style={{ color: "#A79E8E" }}>سوق الجملة © 2026 — الجزائر</p>
@@ -407,7 +453,7 @@ function LandingPage({ onStart }) {
   );
 }
 
-function LoginScreen({ onLogin }) {
+function LoginScreen({ onLogin, onBack }) {
   const [role, setRole] = useState("retail");
   const [mode, setMode] = useState("login");
   const [phone, setPhone] = useState("");
@@ -469,6 +515,14 @@ function LoginScreen({ onLogin }) {
       {FONTS}
       <ZelligePattern color={activeRole.accent} />
       <div className="relative z-10 w-full max-w-md px-5 py-8">
+        {onBack && (
+          <button onClick={onBack} className="flex items-center gap-1.5 mb-4 text-sm font-semibold" style={{ color: MUTED }}>
+            <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4">
+              <path d="M9 18L15 12L9 6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            رجوع
+          </button>
+        )}
         <div className="text-center mb-7">
           <h1 className="text-3xl font-black tracking-tight" style={{ fontFamily: "'Cairo', sans-serif", color: INK }}>سوق الجملة</h1>
           <p className="text-sm mt-1" style={{ color: MUTED }}>منصة التجارة بالجملة، بأسعارك الخاصة</p>
@@ -546,7 +600,7 @@ function LoginScreen({ onLogin }) {
               </button>
               <div className="text-center pt-1">
                 <button type="button" onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); }} className="text-xs font-semibold" style={{ color: activeRole.accent }}>
-                  {mode === "login" ? "ماعندكش حساب؟ سجل كـ " + activeRole.label : "عندك حساب؟ دخل من هنا"}
+                  {mode === "login" ? "ليس لديك حساب؟ سجّل " + (role === "wholesale" ? "كـتاجر جملة" : role === "driver" ? "كـسائق توصيل" : "كـتاجر تجزئة") : "لديك حساب؟ سجّل الدخول من هنا"}
                 </button>
               </div>
             </div>
@@ -1454,7 +1508,7 @@ export default function SouqJumlaApp() {
   const handleLogout = () => { setUser(null); setShowLanding(true); };
 
   if (!user && showLanding) return <LandingPage onStart={() => setShowLanding(false)} />;
-  if (!user) return <LoginScreen onLogin={handleLogin} />;
+  if (!user) return <LoginScreen onLogin={handleLogin} onBack={() => setShowLanding(true)} />;
   if (user.role === "retail") return <RetailDashboard user={user} onLogout={handleLogout} />;
   if (user.role === "wholesale") return <WholesaleDashboard user={user} onLogout={handleLogout} />;
   if (user.role === "driver") return <DriverDashboard user={user} onLogout={handleLogout} />;
