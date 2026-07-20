@@ -301,6 +301,16 @@ function ZelligePattern({ color }) {
   );
 }
 
+function PackageIcon({ color }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6" style={{ color: color || MUTED }}>
+      <path d="M21 8L12 3L3 8V16L12 21L21 16V8Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+      <path d="M3 8L12 13L21 8" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+      <path d="M12 13V21" stroke="currentColor" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
 function Pill({ children, tone }) {
   const map = { gold: { bg: `${GOLD}18`, color: GOLD }, teal: { bg: `${TEAL}18`, color: TEAL }, clay: { bg: `${CLAY}18`, color: CLAY }, muted: { bg: "#00000008", color: MUTED } };
   const s = map[tone] || map.muted;
@@ -431,7 +441,7 @@ function LandingPage({ onStart }) {
         {/* Role badges */}
         <div className="grid grid-cols-3 gap-2 shrink-0">
           {ROLES.map((r) => (
-            <div key={r.id} className="rounded-2xl py-4 px-2 text-center" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
+            <div key={r.id} className="rounded-2xl py-4 px-2 text-center" style={{ background: "#FFF", border: `1px solid ${BORDER}`, boxShadow: "0 1px 3px rgba(16,35,32,0.05)" }}>
               <div className="w-11 h-11 rounded-full flex items-center justify-center mx-auto mb-2" style={{ background: r.accent, color: "#FFF" }}>
                 <div style={{ transform: "scale(0.75)" }}>{r.icon}</div>
               </div>
@@ -654,7 +664,7 @@ function PromoBanner({ products, onAdd }) {
       </div>
       <div className="flex gap-3 overflow-x-auto pb-2 -mx-5 px-5">
         {featured.map((p) => (
-          <div key={p.id} className="relative shrink-0 w-40 rounded-2xl overflow-hidden shadow-sm" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
+          <div key={p.id} className="relative shrink-0 w-40 rounded-2xl overflow-hidden shadow-sm" style={{ background: "#FFF", border: `1px solid ${BORDER}`, boxShadow: "0 1px 3px rgba(16,35,32,0.05)" }}>
             <div className="h-24 w-full overflow-hidden" style={{ background: `${TEAL}12` }}>
               <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" />
             </div>
@@ -795,19 +805,19 @@ function RetailDashboard({ user, onLogout }) {
         {tab === "products" && (
           <>
             <div className="flex gap-3 mb-6 flex-wrap">
-              <div className="rounded-xl p-4 flex-1 min-w-max" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
+              <div className="rounded-xl p-4 flex-1 min-w-max" style={{ background: "#FFF", border: `1px solid ${BORDER}`, boxShadow: "0 1px 3px rgba(16,35,32,0.05)" }}>
                 <p className="text-xs font-medium" style={{ color: MUTED }}>المنتجات المتوفرة</p>
                 <p className="text-xl font-black mt-1" style={{ color: INK, fontFamily: "'Cairo', sans-serif" }}>{products.length}</p>
               </div>
-              <div className="rounded-xl p-4 flex-1 min-w-max" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
+              <div className="rounded-xl p-4 flex-1 min-w-max" style={{ background: "#FFF", border: `1px solid ${BORDER}`, boxShadow: "0 1px 3px rgba(16,35,32,0.05)" }}>
                 <p className="text-xs font-medium" style={{ color: MUTED }}>سلة الشراء</p>
                 <p className="text-xl font-black mt-1" style={{ color: INK, fontFamily: "'Cairo', sans-serif" }}>{cartTotal.toLocaleString()} د.ج</p>
               </div>
-              <div className="rounded-xl p-4 flex-1 min-w-max" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
+              <div className="rounded-xl p-4 flex-1 min-w-max" style={{ background: "#FFF", border: `1px solid ${BORDER}`, boxShadow: "0 1px 3px rgba(16,35,32,0.05)" }}>
                 <p className="text-xs font-medium" style={{ color: MUTED }}>إجمالي مشترياتك</p>
                 <p className="text-xl font-black mt-1" style={{ color: TEAL, fontFamily: "'Cairo', sans-serif" }}>{orders.reduce((s, o) => s + Number(o.total), 0).toLocaleString()} د.ج</p>
               </div>
-              <div className="rounded-xl p-4 flex-1 min-w-max" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
+              <div className="rounded-xl p-4 flex-1 min-w-max" style={{ background: "#FFF", border: `1px solid ${BORDER}`, boxShadow: "0 1px 3px rgba(16,35,32,0.05)" }}>
                 <p className="text-xs font-medium" style={{ color: MUTED }}>أسعارك الخاصة</p>
                 <p className="text-xl font-black mt-1" style={{ color: INK, fontFamily: "'Cairo', sans-serif" }}>نشطة</p>
                 <p className="text-xs mt-0.5" style={{ color: GOLD }}>غير مرئية للتجار الآخرين</p>
@@ -840,9 +850,9 @@ function RetailDashboard({ user, onLogout }) {
               {filtered.map((p) => {
                 const qty = cart[p.id] || 0;
                 return (
-                  <div key={p.id} className="rounded-xl p-4 flex gap-3" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
+                  <div key={p.id} className="rounded-xl p-4 flex gap-3" style={{ background: "#FFF", border: `1px solid ${BORDER}`, boxShadow: "0 1px 3px rgba(16,35,32,0.05)" }}>
                     <div className="w-14 h-14 rounded-lg overflow-hidden flex items-center justify-center text-2xl shrink-0" style={{ background: `${TEAL}12` }}>
-                      {p.image_url ? <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" /> : "📦"}
+                      {p.image_url ? <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" /> : <PackageIcon color={TEAL} />}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-bold truncate" style={{ color: INK }}>{p.name}</p>
@@ -874,7 +884,7 @@ function RetailDashboard({ user, onLogout }) {
           <div className="space-y-3 mb-10">
             {orders.length === 0 && <p className="text-center text-sm py-16" style={{ color: MUTED }}>ماعندكش طلبات بعد</p>}
             {orders.map((o) => (
-              <div key={o.id} className="rounded-xl p-4" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
+              <div key={o.id} className="rounded-xl p-4" style={{ background: "#FFF", border: `1px solid ${BORDER}`, boxShadow: "0 1px 3px rgba(16,35,32,0.05)" }}>
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-bold" style={{ color: MUTED }}>#{o.id.slice(0, 8)}</span>
                   <Pill tone="teal">{ORDER_STATUS_LABELS[o.status] || o.status}</Pill>
@@ -1267,15 +1277,15 @@ function WholesaleDashboard({ user, onLogout }) {
         {!loading && tab === "products" && (
           <div className="space-y-3">
             <div className="flex gap-3 mb-3 flex-wrap">
-              <div className="rounded-xl p-4 flex-1 min-w-max" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
+              <div className="rounded-xl p-4 flex-1 min-w-max" style={{ background: "#FFF", border: `1px solid ${BORDER}`, boxShadow: "0 1px 3px rgba(16,35,32,0.05)" }}>
                 <p className="text-xs font-medium" style={{ color: MUTED }}>منتجاتك</p>
                 <p className="text-xl font-black mt-1" style={{ color: INK, fontFamily: "'Cairo', sans-serif" }}>{products.length}</p>
               </div>
-              <div className="rounded-xl p-4 flex-1 min-w-max" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
+              <div className="rounded-xl p-4 flex-1 min-w-max" style={{ background: "#FFF", border: `1px solid ${BORDER}`, boxShadow: "0 1px 3px rgba(16,35,32,0.05)" }}>
                 <p className="text-xs font-medium" style={{ color: MUTED }}>طلبات قيد الانتظار</p>
                 <p className="text-xl font-black mt-1" style={{ color: GOLD, fontFamily: "'Cairo', sans-serif" }}>{orders.filter((o) => o.status === "pending").length}</p>
               </div>
-              <div className="rounded-xl p-4 flex-1 min-w-max" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
+              <div className="rounded-xl p-4 flex-1 min-w-max" style={{ background: "#FFF", border: `1px solid ${BORDER}`, boxShadow: "0 1px 3px rgba(16,35,32,0.05)" }}>
                 <p className="text-xs font-medium" style={{ color: MUTED }}>إجمالي المبيعات</p>
                 <p className="text-xl font-black mt-1" style={{ color: TEAL, fontFamily: "'Cairo', sans-serif" }}>{orders.filter((o) => o.status !== "pending").reduce((s, o) => s + Number(o.total), 0).toLocaleString()} د.ج</p>
               </div>
@@ -1287,9 +1297,9 @@ function WholesaleDashboard({ user, onLogout }) {
               </div>
             )}
             {products.map((p) => (
-              <div key={p.id} className="rounded-xl p-4 flex items-center gap-4" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
+              <div key={p.id} className="rounded-xl p-4 flex items-center gap-4" style={{ background: "#FFF", border: `1px solid ${BORDER}`, boxShadow: "0 1px 3px rgba(16,35,32,0.05)" }}>
                 <div className="w-14 h-14 rounded-lg overflow-hidden shrink-0 flex items-center justify-center text-2xl" style={{ background: `${GOLD}12` }}>
-                  {p.image_url ? <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" /> : "📦"}
+                  {p.image_url ? <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" /> : <PackageIcon color={GOLD} />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-bold" style={{ color: INK }}>{p.name}</p>
@@ -1311,7 +1321,7 @@ function WholesaleDashboard({ user, onLogout }) {
             {orders.map((o) => {
               const retailer = retailers.find((r) => r.id === o.retailer_id);
               return (
-              <div key={o.id} className="rounded-xl p-4" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
+              <div key={o.id} className="rounded-xl p-4" style={{ background: "#FFF", border: `1px solid ${BORDER}`, boxShadow: "0 1px 3px rgba(16,35,32,0.05)" }}>
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-bold" style={{ color: MUTED }}>#{o.id.slice(0, 8)}</span>
                   <Pill tone={o.status === "pending" ? "gold" : "teal"}>{ORDER_STATUS_LABELS[o.status] || o.status}</Pill>
@@ -1364,7 +1374,7 @@ function WholesaleDashboard({ user, onLogout }) {
               {retailers.length === 0 ? (
                 <p className="text-center text-sm py-6" style={{ color: MUTED }}>ماعندكش تجار مسجلين بعد</p>
               ) : (
-                <div className="rounded-xl overflow-hidden" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
+                <div className="rounded-xl overflow-hidden" style={{ background: "#FFF", border: `1px solid ${BORDER}`, boxShadow: "0 1px 3px rgba(16,35,32,0.05)" }}>
                   {retailers.map((r, i) => {
                     const custom = customPrices[selectedProduct]?.[r.id];
                     return (
@@ -1391,7 +1401,7 @@ function WholesaleDashboard({ user, onLogout }) {
           <div className="space-y-3">
             {retailers.length === 0 && <p className="text-center text-sm py-10" style={{ color: MUTED }}>ماعندكش تجار مسجلين بعد</p>}
             {retailers.map((r) => (
-              <div key={r.id} className="rounded-xl p-4 flex items-center justify-between" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
+              <div key={r.id} className="rounded-xl p-4 flex items-center justify-between" style={{ background: "#FFF", border: `1px solid ${BORDER}`, boxShadow: "0 1px 3px rgba(16,35,32,0.05)" }}>
                 <div>
                   <p className="text-sm font-bold" style={{ color: INK }}>{r.full_name}</p>
                   <p className="text-xs" style={{ color: MUTED }}>{r.city || "—"} · {r.phone || "—"}</p>
@@ -1429,7 +1439,7 @@ function OrderCard({ order, profiles, onAction, actionLabel, subLabel, onInvoice
   const wholesaler = profiles?.[order.wholesaler_id];
   const retailer = profiles?.[order.retailer_id];
   return (
-    <div className="rounded-xl p-4" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
+    <div className="rounded-xl p-4" style={{ background: "#FFF", border: `1px solid ${BORDER}`, boxShadow: "0 1px 3px rgba(16,35,32,0.05)" }}>
       <div className="flex items-center justify-between mb-3">
         <span className="text-xs font-bold" style={{ color: MUTED }}>#{order.id.slice(0, 8)}</span>
         <Pill tone="clay">{Number(order.total).toLocaleString()} د.ج</Pill>
@@ -1581,7 +1591,7 @@ function DriverDashboard({ user, onLogout }) {
           <div className="space-y-2">
             {completedOrders.length === 0 && <p className="text-center text-sm py-16" style={{ color: MUTED }}>ماكانش رحلات مكتملة بعد</p>}
             {completedOrders.map((o) => (
-              <div key={o.id} className="rounded-xl p-4 flex items-center justify-between" style={{ background: "#FFF", border: `1px solid ${BORDER}` }}>
+              <div key={o.id} className="rounded-xl p-4 flex items-center justify-between" style={{ background: "#FFF", border: `1px solid ${BORDER}`, boxShadow: "0 1px 3px rgba(16,35,32,0.05)" }}>
                 <div><p className="text-sm font-bold" style={{ color: INK }}>#{o.id.slice(0, 8)}</p><p className="text-xs" style={{ color: MUTED }}>{new Date(o.created_at).toLocaleDateString("ar-DZ")}</p></div>
                 <span className="text-sm font-black" style={{ color: TEAL, fontFamily: "'Cairo', sans-serif" }}>{Number(o.total).toLocaleString()} د.ج</span>
               </div>
