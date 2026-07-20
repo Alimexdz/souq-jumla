@@ -178,7 +178,7 @@ async function supabaseCreateOrder(retailerId, wholesalerId, items, accessToken)
 }
 
 async function supabaseGetRetailerOrders(retailerId, accessToken) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?retailer_id=eq.${retailerId}&select=*&order=created_at.desc`, {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?retailer_id=eq.${retailerId}&select=*,order_items(*)&order=created_at.desc`, {
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) throw new Error("تعذر جلب الطلبات");
@@ -194,7 +194,7 @@ async function supabaseGetWholesalerOrders(wholesalerId, accessToken) {
 }
 
 async function supabaseGetAvailableOrdersForDriver(accessToken) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?status=eq.ready&driver_id=is.null&select=*`, {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?status=eq.ready&driver_id=is.null&select=*,order_items(*)`, {
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) throw new Error("تعذر جلب الطلبات المتاحة");
@@ -202,7 +202,7 @@ async function supabaseGetAvailableOrdersForDriver(accessToken) {
 }
 
 async function supabaseGetDriverOrders(driverId, accessToken) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?driver_id=eq.${driverId}&select=*&order=created_at.desc`, {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?driver_id=eq.${driverId}&select=*,order_items(*)&order=created_at.desc`, {
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) throw new Error("تعذر جلب طلباتك");
@@ -686,6 +686,7 @@ function RetailDashboard({ user, onLogout }) {
   const [checkoutSuccess, setCheckoutSuccess] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [displayName, setDisplayName] = useState(user.name);
+  const [invoiceOrder, setInvoiceOrder] = useState(null);
 
   const loadProducts = async () => {
     try {
@@ -712,8 +713,10 @@ function RetailDashboard({ user, onLogout }) {
       const rows = await supabaseGetRetailerOrders(user.userId, user.accessToken);
       setOrders(rows);
       const driverIds = rows.map((o) => o.driver_id).filter(Boolean);
-      if (driverIds.length > 0) {
-        const profs = await supabaseGetProfilesByIds(driverIds, user.accessToken);
+      const wholesalerIds = rows.map((o) => o.wholesaler_id).filter(Boolean);
+      const allIds = [...driverIds, ...wholesalerIds];
+      if (allIds.length > 0) {
+        const profs = await supabaseGetProfilesByIds(allIds, user.accessToken);
         const map = {};
         profs.forEach((p) => { map[p.id] = p; });
         setDriverProfiles(map);
@@ -884,12 +887,25 @@ function RetailDashboard({ user, onLogout }) {
                     <span className="text-xs font-bold" style={{ color: TEAL }}>{driverProfiles[o.driver_id].phone}</span>
                   </div>
                 )}
+                {o.status !== "pending" && (
+                  <button onClick={() => setInvoiceOrder(o)} className="w-full mt-3 rounded-lg py-2 text-xs font-bold" style={{ color: TEAL, border: `1px solid ${TEAL}` }}>
+                    عرض الفاتورة
+                  </button>
+                )}
               </div>
             ))}
           </div>
         )}
       </main>
 
+      {invoiceOrder && (
+        <InvoiceModal
+          order={invoiceOrder}
+          wholesalerName={driverProfiles[invoiceOrder.wholesaler_id]?.full_name}
+          retailerName={displayName}
+          onClose={() => setInvoiceOrder(null)}
+        />
+      )}
       {tab === "products" && cartCount > 0 && (
         <div className="fixed bottom-0 inset-x-0 z-30">
           <div className="max-w-5xl mx-auto px-5 pb-4">
@@ -919,6 +935,64 @@ function RetailDashboard({ user, onLogout }) {
 }
 
 // ============ WHOLESALE DASHBOARD ============
+function InvoiceModal({ order, wholesalerName, retailerName, onClose }) {
+  const items = order.order_items || [];
+  return (
+    <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center" style={{ background: "#00000060" }} onClick={onClose}>
+      <div dir="rtl" className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-y-auto" style={{ background: "#FFF" }} onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="px-5 pt-5 pb-4 relative" style={{ background: `linear-gradient(135deg, ${INK}, ${TEAL})` }}>
+          <button onClick={onClose} className="absolute left-4 top-4 text-sm font-bold" style={{ color: "#FFF" }}>✕</button>
+          <p className="text-xs" style={{ color: "#C9BFA9" }}>فاتورة رقم</p>
+          <p className="text-lg font-black text-white" style={{ fontFamily: "'Cairo', sans-serif" }}>#{order.id.slice(0, 8)}</p>
+          <p className="text-xs mt-1" style={{ color: "#C9BFA9" }}>{new Date(order.created_at).toLocaleDateString("ar-DZ", { year: "numeric", month: "long", day: "numeric" })}</p>
+        </div>
+
+        <div className="p-5">
+          {/* From / To */}
+          <div className="flex items-center justify-between mb-4 pb-4" style={{ borderBottom: `1px dashed ${BORDER}` }}>
+            <div>
+              <p className="text-xs" style={{ color: MUTED }}>من (المورد)</p>
+              <p className="text-sm font-bold" style={{ color: INK }}>{wholesalerName || "—"}</p>
+            </div>
+            <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5 shrink-0" style={{ color: MUTED }}>
+              <path d="M6 12H18M18 12L13 7M18 12L13 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <div className="text-left">
+              <p className="text-xs" style={{ color: MUTED }}>إلى (التاجر)</p>
+              <p className="text-sm font-bold" style={{ color: INK }}>{retailerName || "—"}</p>
+            </div>
+          </div>
+
+          {/* Items */}
+          <p className="text-xs font-bold mb-2" style={{ color: MUTED }}>تفاصيل الطلب</p>
+          <div className="space-y-2 mb-4">
+            {items.length === 0 && <p className="text-xs text-center py-4" style={{ color: MUTED }}>لا توجد تفاصيل</p>}
+            {items.map((it) => (
+              <div key={it.id} className="flex items-center justify-between text-xs">
+                <span style={{ color: INK }}>{it.product_name}</span>
+                <span style={{ color: MUTED }}>{it.quantity} × {Number(it.unit_price).toLocaleString()} د.ج</span>
+                <span className="font-bold" style={{ color: INK }}>{Number(it.quantity * it.unit_price).toLocaleString()} د.ج</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Total */}
+          <div className="rounded-xl p-4 flex items-center justify-between mb-4" style={{ background: `${GOLD}10` }}>
+            <span className="text-sm font-bold" style={{ color: INK }}>المجموع الكلي</span>
+            <span className="text-lg font-black" style={{ color: GOLD, fontFamily: "'Cairo', sans-serif" }}>{Number(order.total).toLocaleString()} د.ج</span>
+          </div>
+
+          <div className="flex items-center justify-center gap-2">
+            <span className="w-2 h-2 rounded-full" style={{ background: TEAL }} />
+            <span className="text-xs font-semibold" style={{ color: TEAL }}>{ORDER_STATUS_LABELS[order.status] || order.status}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ProfileModal({ user, onClose, onSaved }) {
   const [fullName, setFullName] = useState(user.name || "");
   const [address, setAddress] = useState("");
@@ -1103,6 +1177,7 @@ function WholesaleDashboard({ user, onLogout }) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [displayName, setDisplayName] = useState(user.name);
+  const [invoiceOrder, setInvoiceOrder] = useState(null);
 
   const loadOrders = async () => {
     try {
@@ -1262,6 +1337,11 @@ function WholesaleDashboard({ user, onLogout }) {
                 {(o.status === "picked_up" || o.status === "delivered") && (
                   <p className="text-xs text-center py-1 font-semibold" style={{ color: GOLD }}>✓ {o.status === "delivered" ? "تم التسليم" : "مع السائق في الطريق"}</p>
                 )}
+                {o.status !== "pending" && (
+                  <button onClick={() => setInvoiceOrder(o)} className="w-full mt-2 rounded-lg py-2 text-xs font-bold" style={{ color: GOLD, border: `1px solid ${GOLD}` }}>
+                    عرض الفاتورة
+                  </button>
+                )}
               </div>
             );})}
           </div>
@@ -1332,12 +1412,20 @@ function WholesaleDashboard({ user, onLogout }) {
           }}
         />
       )}
+      {invoiceOrder && (
+        <InvoiceModal
+          order={invoiceOrder}
+          wholesalerName={displayName}
+          retailerName={retailers.find((r) => r.id === invoiceOrder.retailer_id)?.full_name}
+          onClose={() => setInvoiceOrder(null)}
+        />
+      )}
     </div>
   );
 }
 
 // ============ DRIVER DASHBOARD ============
-function OrderCard({ order, profiles, onAction, actionLabel, subLabel }) {
+function OrderCard({ order, profiles, onAction, actionLabel, subLabel, onInvoice }) {
   const wholesaler = profiles?.[order.wholesaler_id];
   const retailer = profiles?.[order.retailer_id];
   return (
@@ -1367,6 +1455,11 @@ function OrderCard({ order, profiles, onAction, actionLabel, subLabel }) {
       {onAction && (
         <button onClick={() => onAction(order.id)} className="w-full rounded-lg py-2.5 text-sm font-bold text-white" style={{ background: TEAL }}>{actionLabel}</button>
       )}
+      {onInvoice && (
+        <button onClick={() => onInvoice(order)} className="w-full mt-2 rounded-lg py-2 text-xs font-bold" style={{ color: CLAY, border: `1px solid ${CLAY}` }}>
+          عرض الفاتورة
+        </button>
+      )}
     </div>
   );
 }
@@ -1380,6 +1473,7 @@ function DriverDashboard({ user, onLogout }) {
   const [loading, setLoading] = useState(true);
   const [showProfile, setShowProfile] = useState(false);
   const [displayName, setDisplayName] = useState(user.name);
+  const [invoiceOrder, setInvoiceOrder] = useState(null);
 
   const loadAll = async () => {
     try {
@@ -1470,7 +1564,7 @@ function DriverDashboard({ user, onLogout }) {
             {available.length === 0 ? (
               <p className="text-center text-sm py-16" style={{ color: MUTED }}>ماكانش طلبات متاحة حالياً</p>
             ) : available.map((o) => (
-              <OrderCard key={o.id} order={o} profiles={profiles} onAction={acceptOrder} actionLabel="قبول الطلب" subLabel="جاهز للاستلام من المورد" />
+              <OrderCard key={o.id} order={o} profiles={profiles} onAction={acceptOrder} actionLabel="قبول الطلب" subLabel="جاهز للاستلام من المورد" onInvoice={setInvoiceOrder} />
             ))}
           </div>
         )}
@@ -1479,7 +1573,7 @@ function DriverDashboard({ user, onLogout }) {
             {activeMyOrders.length === 0 ? (
               <p className="text-center text-sm py-16" style={{ color: MUTED }}>ماعندكش طلبات نشطة، شوف تبويب "طلبات متاحة"</p>
             ) : activeMyOrders.map((o) => (
-              <OrderCard key={o.id} order={o} profiles={profiles} onAction={deliverOrder} actionLabel="تأكيد التسليم" />
+              <OrderCard key={o.id} order={o} profiles={profiles} onAction={deliverOrder} actionLabel="تأكيد التسليم" onInvoice={setInvoiceOrder} />
             ))}
           </div>
         )}
@@ -1495,11 +1589,17 @@ function DriverDashboard({ user, onLogout }) {
           </div>
         )}
       </main>
+      {invoiceOrder && (
+        <InvoiceModal
+          order={invoiceOrder}
+          wholesalerName={profiles[invoiceOrder.wholesaler_id]?.full_name}
+          retailerName={profiles[invoiceOrder.retailer_id]?.full_name}
+          onClose={() => setInvoiceOrder(null)}
+        />
+      )}
     </div>
   );
 }
-
-// ============ ROOT APP — the router ============
 export default function SouqJumlaApp() {
   const [user, setUser] = useState(null); // null = logged out
   const [showLanding, setShowLanding] = useState(true);
