@@ -438,12 +438,55 @@ function LandingPage({ onStart }) {
           </div>
         </div>
 
-        {/* Role badges */}
+        {/* Algeria map with connected role pins — fills remaining space */}
+        <div className="flex-1 min-h-0 flex items-center justify-center relative py-2">
+          <svg viewBox="0 0 300 300" className="w-full h-full" style={{ maxHeight: 300 }}>
+            <defs>
+              <linearGradient id="algeria-fill" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stopColor={TEAL} />
+                <stop offset="100%" stopColor={INK} />
+              </linearGradient>
+            </defs>
+            {/* stylized Algeria silhouette */}
+            <path
+              d="M40,50 L90,25 L150,15 L210,45 L235,70 L245,130 L225,190 L190,240 L150,285 L110,250 L70,200 L45,140 L35,90 Z"
+              fill="url(#algeria-fill)"
+              opacity="0.94"
+            />
+            <path
+              d="M40,50 L90,25 L150,15 L210,45 L235,70 L245,130 L225,190 L190,240 L150,285 L110,250 L70,200 L45,140 L35,90 Z"
+              fill="none" stroke={GOLD} strokeWidth="1.5" opacity="0.5"
+            />
+
+            {/* connecting routes between the three roles */}
+            <path d="M105,68 Q140,50 172,90" fill="none" stroke={GOLD} strokeWidth="1.6" strokeDasharray="4 4" opacity="0.85" />
+            <path d="M172,90 Q155,120 133,140" fill="none" stroke={GOLD} strokeWidth="1.6" strokeDasharray="4 4" opacity="0.85" />
+            <path d="M133,140 Q110,105 105,68" fill="none" stroke={GOLD} strokeWidth="1.6" strokeDasharray="4 4" opacity="0.85" />
+
+            {/* wholesale pin */}
+            <g transform="translate(105,68)">
+              <circle r="10" fill={ROLES[1].accent} opacity="0.25" />
+              <circle r="5" fill={ROLES[1].accent} stroke="#FFF" strokeWidth="1.5" />
+            </g>
+            {/* retail pin */}
+            <g transform="translate(172,90)">
+              <circle r="10" fill={ROLES[0].accent} opacity="0.25" />
+              <circle r="5" fill={ROLES[0].accent} stroke="#FFF" strokeWidth="1.5" />
+            </g>
+            {/* driver pin */}
+            <g transform="translate(133,140)">
+              <circle r="10" fill={ROLES[2].accent} opacity="0.25" />
+              <circle r="5" fill={ROLES[2].accent} stroke="#FFF" strokeWidth="1.5" />
+            </g>
+          </svg>
+        </div>
+
+        {/* Role labels */}
         <div className="grid grid-cols-3 gap-2 shrink-0">
           {ROLES.map((r) => (
-            <div key={r.id} className="rounded-2xl py-4 px-2 text-center" style={{ background: "#FFF", border: `1px solid ${BORDER}`, boxShadow: "0 1px 3px rgba(16,35,32,0.05)" }}>
-              <div className="w-11 h-11 rounded-full flex items-center justify-center mx-auto mb-2" style={{ background: r.accent, color: "#FFF" }}>
-                <div style={{ transform: "scale(0.75)" }}>{r.icon}</div>
+            <div key={r.id} className="rounded-2xl py-3 px-2 text-center" style={{ background: "#FFF", border: `1px solid ${BORDER}`, boxShadow: "0 1px 3px rgba(16,35,32,0.05)" }}>
+              <div className="w-8 h-8 rounded-full flex items-center justify-center mx-auto mb-1.5" style={{ background: r.accent, color: "#FFF" }}>
+                <div style={{ transform: "scale(0.6)" }}>{r.icon}</div>
               </div>
               <p className="text-xs font-black" style={{ color: INK }}>{r.label}</p>
             </div>
