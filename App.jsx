@@ -447,34 +447,34 @@ function LandingPage({ onStart }) {
                 <stop offset="100%" stopColor={INK} />
               </linearGradient>
             </defs>
-            {/* stylized Algeria silhouette */}
+            {/* Algeria silhouette (stylized, based on reference outline) */}
             <path
-              d="M40,50 L90,25 L150,15 L210,45 L235,70 L245,130 L225,190 L190,240 L150,285 L110,250 L70,200 L45,140 L35,90 Z"
+              d="M85,52 L115,38 L150,44 L182,34 L212,44 L235,58 L248,75 L215,112 L200,115 L190,135 L182,150 L222,140 L258,158 L248,205 L200,228 L165,238 L100,228 L58,205 L30,168 L48,150 L72,140 L85,112 L80,90 Z"
               fill="url(#algeria-fill)"
               opacity="0.94"
             />
             <path
-              d="M40,50 L90,25 L150,15 L210,45 L235,70 L245,130 L225,190 L190,240 L150,285 L110,250 L70,200 L45,140 L35,90 Z"
+              d="M85,52 L115,38 L150,44 L182,34 L212,44 L235,58 L248,75 L215,112 L200,115 L190,135 L182,150 L222,140 L258,158 L248,205 L200,228 L165,238 L100,228 L58,205 L30,168 L48,150 L72,140 L85,112 L80,90 Z"
               fill="none" stroke={GOLD} strokeWidth="1.5" opacity="0.5"
             />
 
             {/* connecting routes between the three roles */}
-            <path d="M105,68 Q140,50 172,90" fill="none" stroke={GOLD} strokeWidth="1.6" strokeDasharray="4 4" opacity="0.85" />
-            <path d="M172,90 Q155,120 133,140" fill="none" stroke={GOLD} strokeWidth="1.6" strokeDasharray="4 4" opacity="0.85" />
-            <path d="M133,140 Q110,105 105,68" fill="none" stroke={GOLD} strokeWidth="1.6" strokeDasharray="4 4" opacity="0.85" />
+            <path d="M130,55 Q160,45 185,65" fill="none" stroke={GOLD} strokeWidth="1.6" strokeDasharray="4 4" opacity="0.85" />
+            <path d="M185,65 Q165,90 145,110" fill="none" stroke={GOLD} strokeWidth="1.6" strokeDasharray="4 4" opacity="0.85" />
+            <path d="M145,110 Q135,80 130,55" fill="none" stroke={GOLD} strokeWidth="1.6" strokeDasharray="4 4" opacity="0.85" />
 
             {/* wholesale pin */}
-            <g transform="translate(105,68)">
+            <g transform="translate(130,55)">
               <circle r="10" fill={ROLES[1].accent} opacity="0.25" />
               <circle r="5" fill={ROLES[1].accent} stroke="#FFF" strokeWidth="1.5" />
             </g>
             {/* retail pin */}
-            <g transform="translate(172,90)">
+            <g transform="translate(185,65)">
               <circle r="10" fill={ROLES[0].accent} opacity="0.25" />
               <circle r="5" fill={ROLES[0].accent} stroke="#FFF" strokeWidth="1.5" />
             </g>
             {/* driver pin */}
-            <g transform="translate(133,140)">
+            <g transform="translate(145,110)">
               <circle r="10" fill={ROLES[2].accent} opacity="0.25" />
               <circle r="5" fill={ROLES[2].accent} stroke="#FFF" strokeWidth="1.5" />
             </g>
