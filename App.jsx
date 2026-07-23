@@ -65,9 +65,9 @@ async function supabaseGetMyProducts(wholesalerId, accessToken) {
 }
 
 // جلب كل المنتجات مع السعر الخاص بتاجر تجزئة معيّن (إن وجد)
-async function supabaseGetProductsForRetailer(retailerId, accessToken) {
+async function supabaseGetProductsForRetailer(retailerId, accessToken, limit = 30, offset = 0) {
   const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/products?select=*,custom_prices(price,retailer_id)&custom_prices.retailer_id=eq.${retailerId}&order=created_at.desc`,
+    `${SUPABASE_URL}/rest/v1/products?select=*,custom_prices(price,retailer_id)&custom_prices.retailer_id=eq.${retailerId}&order=created_at.desc&limit=${limit}&offset=${offset}`,
     { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${accessToken}` } }
   );
   if (!res.ok) throw new Error("تعذر جلب المنتجات");
@@ -102,6 +102,34 @@ async function supabaseUploadImage(file, path, accessToken) {
   });
   if (!res.ok) throw new Error("تعذر رفع الصورة");
   return `${SUPABASE_URL}/storage/v1/object/public/product-images/${path}`;
+}
+
+// نضغط الصورة قبل الرفع (أقصى عرض 1000px، جودة 78%) لتقليل استهلاك مساحة التخزين
+function compressImage(file, maxWidth = 1000, quality = 0.78) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = (e) => { img.src = e.target.result; };
+    reader.onerror = reject;
+    img.onload = () => {
+      const scale = Math.min(1, maxWidth / img.width);
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) return reject(new Error("تعذر ضغط الصورة"));
+          resolve(new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" }));
+        },
+        "image/jpeg",
+        quality
+      );
+    };
+    img.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 async function supabaseGetRetailers(accessToken) {
@@ -740,24 +768,42 @@ function RetailDashboard({ user, onLogout }) {
   const [showProfile, setShowProfile] = useState(false);
   const [displayName, setDisplayName] = useState(user.name);
   const [invoiceOrder, setInvoiceOrder] = useState(null);
+  const PAGE_SIZE = 30;
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  const normalizeProducts = (rows) => rows.map((p) => ({
+    id: p.id,
+    name: p.name,
+    unit: p.unit,
+    cat: p.category || "grocery",
+    wholesalerId: p.wholesaler_id,
+    price: p.custom_prices && p.custom_prices.length > 0 ? Number(p.custom_prices[0].price) : Number(p.base_price),
+    image_url: p.image_url,
+  }));
 
   const loadProducts = async () => {
     try {
-      const rows = await supabaseGetProductsForRetailer(user.userId, user.accessToken);
-      const normalized = rows.map((p) => ({
-        id: p.id,
-        name: p.name,
-        unit: p.unit,
-        cat: p.category || "grocery",
-        wholesalerId: p.wholesaler_id,
-        price: p.custom_prices && p.custom_prices.length > 0 ? Number(p.custom_prices[0].price) : Number(p.base_price),
-        image_url: p.image_url,
-      }));
-      setProducts(normalized);
+      const rows = await supabaseGetProductsForRetailer(user.userId, user.accessToken, PAGE_SIZE, 0);
+      setProducts(normalizeProducts(rows));
+      setHasMore(rows.length === PAGE_SIZE);
     } catch (e) {
       console.error(e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMoreProducts = async () => {
+    setLoadingMore(true);
+    try {
+      const rows = await supabaseGetProductsForRetailer(user.userId, user.accessToken, PAGE_SIZE, products.length);
+      setProducts((prev) => [...prev, ...normalizeProducts(rows)]);
+      setHasMore(rows.length === PAGE_SIZE);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -889,7 +935,7 @@ function RetailDashboard({ user, onLogout }) {
               <p className="text-center text-sm py-16" style={{ color: MUTED }}>ماكانش منتجات متوفرة حالياً، رجع بعد شوية</p>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-24">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
               {filtered.map((p) => {
                 const qty = cart[p.id] || 0;
                 return (
@@ -920,6 +966,15 @@ function RetailDashboard({ user, onLogout }) {
                 );
               })}
             </div>
+
+            {!loading && !query && hasMore && (
+              <div className="text-center mb-4">
+                <button onClick={loadMoreProducts} disabled={loadingMore} className="rounded-lg px-6 py-2.5 text-xs font-bold" style={{ color: TEAL, border: `1px solid ${TEAL}`, opacity: loadingMore ? 0.6 : 1 }}>
+                  {loadingMore ? "جاري التحميل..." : "تحميل المزيد من المنتجات"}
+                </button>
+              </div>
+            )}
+            <div className="mb-24" />
           </>
         )}
 
@@ -1136,11 +1191,23 @@ function AddProductModal({ user, onClose, onAdded }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const handleImagePick = (e) => {
+  const [compressing, setCompressing] = useState(false);
+
+  const handleImagePick = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    setImageFile(file);
-    setImagePreview(URL.createObjectURL(file));
+    setCompressing(true);
+    try {
+      const compressed = await compressImage(file);
+      setImageFile(compressed);
+      setImagePreview(URL.createObjectURL(compressed));
+    } catch (err) {
+      // إذا فشل الضغط لأي سبب، نستعمل الصورة الأصلية
+      setImageFile(file);
+      setImagePreview(URL.createObjectURL(file));
+    } finally {
+      setCompressing(false);
+    }
   };
 
   const handleSave = async () => {
@@ -1183,7 +1250,9 @@ function AddProductModal({ user, onClose, onAdded }) {
 
         <label className="block mb-4">
           <div className="w-full h-32 rounded-xl flex items-center justify-center overflow-hidden" style={{ background: SURFACE, border: `1.5px dashed ${BORDER}` }}>
-            {imagePreview ? (
+            {compressing ? (
+              <span className="text-xs" style={{ color: MUTED }}>جاري تجهيز الصورة...</span>
+            ) : imagePreview ? (
               <img src={imagePreview} alt="معاينة" className="w-full h-full object-cover" />
             ) : (
               <span className="text-xs" style={{ color: MUTED }}>اضغط لاختيار صورة المنتج</span>
