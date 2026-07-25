@@ -466,57 +466,21 @@ function LandingPage({ onStart }) {
           </div>
         </div>
 
-        {/* Algeria map with connected role pins — fills remaining space */}
-        <div className="flex-1 min-h-0 flex items-center justify-center relative py-2">
-          <svg viewBox="0 0 300 300" className="w-full h-full" style={{ maxHeight: 300 }}>
-            <defs>
-              <linearGradient id="algeria-fill" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stopColor={TEAL} />
-                <stop offset="100%" stopColor={INK} />
-              </linearGradient>
-            </defs>
-            {/* Algeria silhouette (stylized, based on reference outline) */}
-            <path
-              d="M85,52 L115,38 L150,44 L182,34 L212,44 L235,58 L248,75 L215,112 L200,115 L190,135 L182,150 L222,140 L258,158 L248,205 L200,228 L165,238 L100,228 L58,205 L30,168 L48,150 L72,140 L85,112 L80,90 Z"
-              fill="url(#algeria-fill)"
-              opacity="0.94"
-            />
-            <path
-              d="M85,52 L115,38 L150,44 L182,34 L212,44 L235,58 L248,75 L215,112 L200,115 L190,135 L182,150 L222,140 L258,158 L248,205 L200,228 L165,238 L100,228 L58,205 L30,168 L48,150 L72,140 L85,112 L80,90 Z"
-              fill="none" stroke={GOLD} strokeWidth="1.5" opacity="0.5"
-            />
-
-            {/* connecting routes between the three roles */}
-            <path d="M130,55 Q160,45 185,65" fill="none" stroke={GOLD} strokeWidth="1.6" strokeDasharray="4 4" opacity="0.85" />
-            <path d="M185,65 Q165,90 145,110" fill="none" stroke={GOLD} strokeWidth="1.6" strokeDasharray="4 4" opacity="0.85" />
-            <path d="M145,110 Q135,80 130,55" fill="none" stroke={GOLD} strokeWidth="1.6" strokeDasharray="4 4" opacity="0.85" />
-
-            {/* wholesale pin */}
-            <g transform="translate(130,55)">
-              <circle r="10" fill={ROLES[1].accent} opacity="0.25" />
-              <circle r="5" fill={ROLES[1].accent} stroke="#FFF" strokeWidth="1.5" />
-            </g>
-            {/* retail pin */}
-            <g transform="translate(185,65)">
-              <circle r="10" fill={ROLES[0].accent} opacity="0.25" />
-              <circle r="5" fill={ROLES[0].accent} stroke="#FFF" strokeWidth="1.5" />
-            </g>
-            {/* driver pin */}
-            <g transform="translate(145,110)">
-              <circle r="10" fill={ROLES[2].accent} opacity="0.25" />
-              <circle r="5" fill={ROLES[2].accent} stroke="#FFF" strokeWidth="1.5" />
-            </g>
-          </svg>
-        </div>
-
-        {/* Role labels */}
-        <div className="grid grid-cols-3 gap-2 shrink-0">
-          {ROLES.map((r) => (
-            <div key={r.id} className="rounded-2xl py-3 px-2 text-center" style={{ background: "#FFF", border: `1px solid ${BORDER}`, boxShadow: "0 1px 3px rgba(16,35,32,0.05)" }}>
-              <div className="w-8 h-8 rounded-full flex items-center justify-center mx-auto mb-1.5" style={{ background: r.accent, color: "#FFF" }}>
-                <div style={{ transform: "scale(0.6)" }}>{r.icon}</div>
+        {/* Key value propositions — fills remaining space */}
+        <div className="flex-1 min-h-0 flex flex-col justify-center gap-3">
+          {[
+            { icon: "◆", title: "سعرك الخاص", desc: "كل مورد يحدد لك سعر خاص، غير مرئي لباقي التجار", color: GOLD },
+            { icon: "→", title: "توصيل مباشر", desc: "سائق يوصلك الطلبية من المورد لمحلك مباشرة", color: TEAL },
+            { icon: "✕", title: "بلا وسطاء", desc: "تتعامل مباشرة مع المورد، بلا عمولات خفية", color: CLAY },
+          ].map((f, i) => (
+            <div key={i} className="rounded-2xl p-4 flex items-center gap-4" style={{ background: "#FFF", border: `1px solid ${BORDER}`, boxShadow: "0 1px 3px rgba(16,35,32,0.05)" }}>
+              <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 font-black text-lg" style={{ background: `${f.color}15`, color: f.color }}>
+                {f.icon}
               </div>
-              <p className="text-xs font-black" style={{ color: INK }}>{r.label}</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-black mb-0.5" style={{ color: INK }}>{f.title}</p>
+                <p className="text-xs leading-snug" style={{ color: MUTED }}>{f.desc}</p>
+              </div>
             </div>
           ))}
         </div>
